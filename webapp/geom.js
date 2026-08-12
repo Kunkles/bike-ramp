@@ -13,6 +13,8 @@
   'use strict';
 
   var DEFAULTS = {
+    shape: 'roller',   // 'roller' | 'drop' | 'kicker'
+    deck: 150,         // drop only: flat run before the edge
     hillLength: 600, hillWidth: 300, hillHeight: 45, humps: 1,
     bevelRun: 90, edgeLip: 1.2,
     bedX: 250, bedY: 250,      // usable bed, after edge margin
@@ -34,9 +36,30 @@
   };
 
   // -------------------------------------------------------------- profile ---
+  // Three lengthwise profiles. 'roller' comes back down to the ground; 'drop'
+  // and 'kicker' both finish at full height, so the far end of the last tile is
+  // a vertical face.
   function profX(p, x) {
-    return p.edgeLip + (p.hillHeight - p.edgeLip) / 2 *
-           (1 - Math.cos(2 * Math.PI * p.humps * x / p.hillLength));
+    var H = p.hillHeight, lip = p.edgeLip, L = p.hillLength, h = H - lip;
+
+    if (p.shape === 'drop') {
+      // Smooth rise -- zero slope at the toe and at the deck -- then flat to
+      // the edge, where it simply stops.
+      var rise = Math.max(1, L - Math.min(p.deck, L * 0.8));
+      if (x >= rise) return H;
+      var t = Math.min(1, Math.max(0, x / rise));
+      return lip + h * 0.5 * (1 - Math.cos(Math.PI * t));
+    }
+
+    if (p.shape === 'kicker') {
+      // Circular arc, tangent to the ground at the toe, steepest at the lip.
+      if (h < 0.01) return lip;
+      var R = (L * L + h * h) / (2 * h);
+      var xx = Math.min(Math.max(x, 0), L);
+      return lip + R - Math.sqrt(Math.max(0, R * R - xx * xx));
+    }
+
+    return lip + h / 2 * (1 - Math.cos(2 * Math.PI * p.humps * x / L));
   }
   function profY(p, y) {
     if (p.bevelRun <= 0) return p.hillHeight;
@@ -45,9 +68,20 @@
   }
   function hAt(p, x, y) { return Math.min(profX(p, x), profY(p, y)); }
 
+  // Steepest gradient the rider meets. For a kicker that is the lip, i.e. the
+  // takeoff angle; for a drop it is the approach, not the edge itself.
   function maxSlopeDeg(p) {
-    return Math.atan(Math.PI * p.humps * (p.hillHeight - p.edgeLip) / p.hillLength)
-           * 180 / Math.PI;
+    var L = p.hillLength, h = p.hillHeight - p.edgeLip, t;
+    if (p.shape === 'drop') {
+      t = Math.PI * h / (2 * Math.max(1, L - Math.min(p.deck, L * 0.8)));
+    } else if (p.shape === 'kicker') {
+      if (h < 0.01) return 0;
+      var R = (L * L + h * h) / (2 * h);
+      t = L / Math.max(1e-9, R - h);
+    } else {
+      t = Math.PI * p.humps * h / L;
+    }
+    return Math.atan(t) * 180 / Math.PI;
   }
 
   // --------------------------------------------------------------- tiling ---
@@ -590,6 +624,8 @@
     return {
       params: p, tiling: t, tiles: tiles, total: total,
       slope: maxSlopeDeg(p),
+      slopeLabel: p.shape === 'kicker' ? 'Takeoff'
+                : p.shape === 'drop' ? 'Approach' : 'Max slope',
       biggest: biggest,
       spikes: tiles.reduce(function (n, q) { return n + q.spots.length; }, 0),
       fits: tw <= bw + 1e-6 && th <= bh + 1e-6,

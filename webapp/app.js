@@ -9,11 +9,28 @@
   var result = null;
 
   var PRESETS = {
-    'First hill':  { hillLength:600, hillWidth:300, hillHeight:45, humps:1, bevelRun:90 },
-    'Taller':      { hillLength:800, hillWidth:340, hillHeight:70, humps:1, bevelRun:100 },
-    'Camel back':  { hillLength:1000, hillWidth:300, hillHeight:50, humps:2, bevelRun:90 },
-    'Wide & low':  { hillLength:700, hillWidth:480, hillHeight:35, humps:1, bevelRun:130 }
+    'First hill':  { shape:'roller', hillLength:600, hillWidth:300, hillHeight:45,
+                     humps:1, bevelRun:90 },
+    'Taller':      { shape:'roller', hillLength:800, hillWidth:340, hillHeight:70,
+                     humps:1, bevelRun:100 },
+    'Camel back':  { shape:'roller', hillLength:1000, hillWidth:300, hillHeight:50,
+                     humps:2, bevelRun:90 },
+    'Wide & low':  { shape:'roller', hillLength:700, hillWidth:480, hillHeight:35,
+                     humps:1, bevelRun:130 },
+    'Step drop':   { shape:'drop', hillLength:500, hillWidth:300, hillHeight:50,
+                     deck:150, bevelRun:90 },
+    'Little jump': { shape:'kicker', hillLength:350, hillWidth:300, hillHeight:40,
+                     bevelRun:90 }
   };
+
+  var SHAPES = [
+    { v:'roller', label:'Roller',
+      hint:'Up and back down. Nothing to catch a wheel at either end.' },
+    { v:'drop',   label:'Step drop',
+      hint:'Rises, runs flat, then stops at a vertical edge. Height is the drop.' },
+    { v:'kicker', label:'Curved jump',
+      hint:'Curved launch, steepest at the lip, vertical behind it.' }
+  ];
 
   // Nominal bed sizes; BED_MARGIN comes off each axis for clearance at the edge.
   var BED_MARGIN = 6;
@@ -41,13 +58,17 @@
                    '#E8E4DC','#2A2E30'];
 
   var CONTROLS = [
-    { group:'Hill', items:[
+    { group:'Hill', custom:'shape', items:[
       { k:'hillLength', label:'Length',     min:250, max:2000, step:10, unit:'mm',
         hint:'Toe to toe. Longer is gentler.' },
+      { k:'deck',       label:'Deck',       min:30,  max:400,  step:10, unit:'mm',
+        hint:'Flat run between the top of the rise and the edge.',
+        show:function () { return state.shape === 'drop'; } },
       { k:'hillWidth',  label:'Width',      min:150, max:900,  step:10, unit:'mm' },
       { k:'hillHeight', label:'Height',     min:15,  max:150,  step:1,  unit:'mm' },
       { k:'humps',      label:'Humps',      min:1,   max:4,    step:1,  unit:'',
-        hint:'More than one? Add length to match, or it gets steep.' },
+        hint:'More than one? Add length to match, or it gets steep.',
+        show:function () { return state.shape === 'roller'; } },
       { k:'bevelRun',   label:'Side taper', min:0,   max:250,  step:5,  unit:'mm',
         hint:'How far the sides slope down to the floor. 0 gives a cliff edge.' }
     ]},
@@ -72,6 +93,8 @@
   function rebuild() {
     result = BR.build(state);
     result.estimate = BR.estimate(result.total, { infill: state.infill });
+    applyVisibility();
+    syncShape();
     renderReadouts();
     renderTiles();
     gl.upload(buildBuffers());
@@ -352,6 +375,7 @@
       b.map(function (v) { return Math.round(v); }).join(' \u00d7 ') +
       ' <span class="tag ' + (r.fits ? 'ok' : 'crit') + '">' +
       (r.fits ? 'fits' : '+' + Math.ceil(over) + 'mm over') + '</span>';
+    $('#ro-slope-label').textContent = r.slopeLabel;
     $('#ro-slope').innerHTML = r.slope.toFixed(1) + '\u00b0' +
       '<span class="sub">' + slopeWord(r.slope) + '</span>';
     $('#ro-filament').innerHTML = (e.grams / 1000).toFixed(2) +
@@ -467,6 +491,41 @@
     bedInputs.y.value = state.bedY;
   }
 
+  function shapePicker() {
+    var wrap = document.createDocumentFragment();
+    var c = el('div', 'ctrl');
+    var chips = el('div', 'chips');
+    var hint = el('p', 'hint');
+    SHAPES.forEach(function (sh) {
+      var b = el('button', 'chip', sh.label);
+      b.type = 'button';
+      b.setAttribute('aria-pressed', String(state.shape === sh.v));
+      b.addEventListener('click', function () {
+        state.shape = sh.v;
+        Array.prototype.forEach.call(chips.children, function (o) {
+          o.setAttribute('aria-pressed', String(o === b));
+        });
+        syncInputs(); rebuild(); markPreset();
+      });
+      chips.appendChild(b);
+    });
+    c.appendChild(chips);
+    c.appendChild(hint);
+    wrap.appendChild(c);
+    shapeChips = { chips: chips, hint: hint };
+    return wrap;
+  }
+
+  var shapeChips = null;
+  function syncShape() {
+    if (!shapeChips) return;
+    SHAPES.forEach(function (sh, i) {
+      shapeChips.chips.children[i]
+        .setAttribute('aria-pressed', String(state.shape === sh.v));
+      if (state.shape === sh.v) shapeChips.hint.textContent = sh.hint;
+    });
+  }
+
   function spikeGroup() {
     var host = document.createDocumentFragment();
     var sg = el('div', 'group');
@@ -518,6 +577,7 @@
       var g = el('div', 'group');
       g.appendChild(el('h2', null, grp.group));
       if (grp.custom === 'printer') g.appendChild(printerPicker());
+      if (grp.custom === 'shape') g.appendChild(shapePicker());
       grp.items.forEach(function (it) {
         var c = el('div', 'ctrl');
         var top = el('div', 'ctrl-top');
@@ -540,6 +600,7 @@
         c.appendChild(top); c.appendChild(rng);
         if (it.hint) c.appendChild(el('p', 'hint', it.hint));
         g.appendChild(c);
+        it._el = c;
 
         var set = function (v, from) {
           v = Math.min(it.max, Math.max(it.min, v));
@@ -607,10 +668,21 @@
       g.items.forEach(function (it) { if (it._set) it._set(state[it.k]); });
     });
   }
+  // Controls that only mean something for one shape are hidden for the others.
+  function applyVisibility() {
+    CONTROLS.forEach(function (g) {
+      g.items.forEach(function (it) {
+        if (it._el) it._el.style.display = !it.show || it.show() ? '' : 'none';
+      });
+    });
+  }
   function markPreset() {
     document.querySelectorAll('[data-preset]').forEach(function (c) {
       var p = PRESETS[c.dataset.preset];
-      var on = Object.keys(p).every(function (k) { return Math.abs(state[k] - p[k]) < 1e-9; });
+      var on = Object.keys(p).every(function (k) {
+        return typeof p[k] === 'string' ? state[k] === p[k]
+                                        : Math.abs(state[k] - p[k]) < 1e-9;
+      });
       c.setAttribute('aria-pressed', String(on));
     });
   }
@@ -631,9 +703,15 @@
     var r = result, e = r.estimate;
     return [
       'Balance-bike coasting hill', '',
-      'Hill        ' + Math.round(state.hillLength) + ' x ' + Math.round(state.hillWidth) +
-        ' x ' + Math.round(state.hillHeight) + ' mm, ' + state.humps + ' hump(s)',
-      'Max slope   ' + r.slope.toFixed(1) + ' deg (' + slopeWord(r.slope) + ')',
+      'Shape       ' + (state.shape === 'drop'
+        ? 'step drop -- rise, ' + state.deck + ' mm deck, then a ' +
+          Math.round(state.hillHeight) + ' mm vertical edge'
+        : state.shape === 'kicker'
+        ? 'curved jump -- launch ramp, vertical behind the lip'
+        : 'roller -- ' + state.humps + ' hump(s), up and back down'),
+      'Size        ' + Math.round(state.hillLength) + ' x ' + Math.round(state.hillWidth) +
+        ' x ' + Math.round(state.hillHeight) + ' mm',
+      r.slopeLabel.padEnd(11) + ' ' + r.slope.toFixed(1) + ' deg (' + slopeWord(r.slope) + ')',
       'Tiles       ' + r.tiles.length + '  (' + r.tiling.nx + ' along the run x ' +
         r.tiling.ny + ' across)',
       'Largest     ' + r.biggest.m.size.map(function (v) { return Math.round(v); }).join(' x ') +
@@ -659,6 +737,13 @@
       '  Sockets carry ' + state.fit.toFixed(2) + ' mm clearance per side. If a joint is',
       '  tight, pare the socket walls rather than reprinting.', '',
       'Before he rides it',
+    ].concat(state.shape === 'roller' ? [] : [
+      state.shape === 'drop'
+        ? '  This one ends in a ' + Math.round(state.hillHeight) +
+          ' mm vertical edge. Leave clear flat run-out past it,'
+        : '  This one launches. Leave clear flat run-out past the lip,',
+      '  and note the back of it is a wall if he rides at it the wrong way round.',
+    ]).concat([
       '  The dovetails hold tiles to each other but not to the ground. On a hard',
       '  floor the whole hill will skate. Stick rubber pads underneath, run a bead',
       '  of silicone caulk on the undersides, or set it on a rubber-backed rug.',
@@ -673,7 +758,7 @@
       '  bore, so the first turn is stiff -- grip the hex flange with pliers if',
       '  you need to. They back out again for indoor use.',
       '  With spikes fitted the hill stands about 3 mm off the ground.', ''
-    ] : []).join('\n');
+    ] : [])).join('\n');
   }
 
   function downloadZip() {
@@ -691,6 +776,7 @@
 
   function scadSource() {
     var map = {
+      shape: '"' + state.shape + '"', deck: state.deck,
       hill_length: state.hillLength, hill_width: state.hillWidth,
       hill_height: state.hillHeight, humps: state.humps, bevel_run: state.bevelRun,
       edge_lip: state.edgeLip, bed_x: state.bedX, bed_y: state.bedY,

@@ -259,7 +259,7 @@ input[type=range]::-moz-range-thumb {
     <dl class="readouts">
       <div class="ro"><dt>Tiles</dt><dd id="ro-tiles">&mdash;</dd></div>
       <div class="ro"><dt>Largest tile</dt><dd id="ro-largest">&mdash;</dd></div>
-      <div class="ro"><dt>Max slope</dt><dd id="ro-slope">&mdash;</dd></div>
+      <div class="ro"><dt id="ro-slope-label">Max slope</dt><dd id="ro-slope">&mdash;</dd></div>
       <div class="ro"><dt>Filament</dt><dd id="ro-filament">&mdash;</dd></div>
       <div class="ro"><dt>Print time</dt><dd id="ro-time">&mdash;</dd></div>
       <div class="ro"><dt>Spikes</dt><dd id="ro-spikes">&mdash;</dd></div>
@@ -301,6 +301,8 @@ input[type=range]::-moz-range-thumb {
   'use strict';
 
   var DEFAULTS = {
+    shape: 'roller',   // 'roller' | 'drop' | 'kicker'
+    deck: 150,         // drop only: flat run before the edge
     hillLength: 600, hillWidth: 300, hillHeight: 45, humps: 1,
     bevelRun: 90, edgeLip: 1.2,
     bedX: 250, bedY: 250,      // usable bed, after edge margin
@@ -322,9 +324,30 @@ input[type=range]::-moz-range-thumb {
   };
 
   // -------------------------------------------------------------- profile ---
+  // Three lengthwise profiles. 'roller' comes back down to the ground; 'drop'
+  // and 'kicker' both finish at full height, so the far end of the last tile is
+  // a vertical face.
   function profX(p, x) {
-    return p.edgeLip + (p.hillHeight - p.edgeLip) / 2 *
-           (1 - Math.cos(2 * Math.PI * p.humps * x / p.hillLength));
+    var H = p.hillHeight, lip = p.edgeLip, L = p.hillLength, h = H - lip;
+
+    if (p.shape === 'drop') {
+      // Smooth rise -- zero slope at the toe and at the deck -- then flat to
+      // the edge, where it simply stops.
+      var rise = Math.max(1, L - Math.min(p.deck, L * 0.8));
+      if (x >= rise) return H;
+      var t = Math.min(1, Math.max(0, x / rise));
+      return lip + h * 0.5 * (1 - Math.cos(Math.PI * t));
+    }
+
+    if (p.shape === 'kicker') {
+      // Circular arc, tangent to the ground at the toe, steepest at the lip.
+      if (h < 0.01) return lip;
+      var R = (L * L + h * h) / (2 * h);
+      var xx = Math.min(Math.max(x, 0), L);
+      return lip + R - Math.sqrt(Math.max(0, R * R - xx * xx));
+    }
+
+    return lip + h / 2 * (1 - Math.cos(2 * Math.PI * p.humps * x / L));
   }
   function profY(p, y) {
     if (p.bevelRun <= 0) return p.hillHeight;
@@ -333,9 +356,20 @@ input[type=range]::-moz-range-thumb {
   }
   function hAt(p, x, y) { return Math.min(profX(p, x), profY(p, y)); }
 
+  // Steepest gradient the rider meets. For a kicker that is the lip, i.e. the
+  // takeoff angle; for a drop it is the approach, not the edge itself.
   function maxSlopeDeg(p) {
-    return Math.atan(Math.PI * p.humps * (p.hillHeight - p.edgeLip) / p.hillLength)
-           * 180 / Math.PI;
+    var L = p.hillLength, h = p.hillHeight - p.edgeLip, t;
+    if (p.shape === 'drop') {
+      t = Math.PI * h / (2 * Math.max(1, L - Math.min(p.deck, L * 0.8)));
+    } else if (p.shape === 'kicker') {
+      if (h < 0.01) return 0;
+      var R = (L * L + h * h) / (2 * h);
+      t = L / Math.max(1e-9, R - h);
+    } else {
+      t = Math.PI * p.humps * h / L;
+    }
+    return Math.atan(t) * 180 / Math.PI;
   }
 
   // --------------------------------------------------------------- tiling ---
@@ -878,6 +912,8 @@ input[type=range]::-moz-range-thumb {
     return {
       params: p, tiling: t, tiles: tiles, total: total,
       slope: maxSlopeDeg(p),
+      slopeLabel: p.shape === 'kicker' ? 'Takeoff'
+                : p.shape === 'drop' ? 'Approach' : 'Max slope',
       biggest: biggest,
       spikes: tiles.reduce(function (n, q) { return n + q.spots.length; }, 0),
       fits: tw <= bw + 1e-6 && th <= bh + 1e-6,
@@ -899,7 +935,7 @@ input[type=range]::-moz-range-thumb {
   else root.BikeRamp = api;
 })(this);
 </script>
-<script>window.SCAD_SOURCE = "// ============================================================================\n//  bikeramp.scad  --  printable coasting hill for a toddler balance bike\n//\n//  Generates a smooth cosine \"roller\" hill, auto-split into bed-sized tiles\n//  that lock together with drop-in dovetails.\n//\n//  Render one tile:   openscad -D 'part=\"tile\"' -D tile_i=0 -D tile_j=0 -o t.stl bikeramp.scad\n//  Preview the hill:  openscad -D 'part=\"hill\"' bikeramp.scad\n//  See ./render.sh for batch export.\n// ============================================================================\n\n/* [Hill] */\nhill_length = 600;   // total run, front toe to back toe (mm)\nhill_width  = 300;   // riding width (mm)\nhill_height = 45;    // crest height (mm)\nhumps       = 1;     // 1 = single hill, 2 = camel back, ...\nbevel_run   = 90;    // side taper: outer this-many mm slope down to the floor. 0 = vertical sides\nedge_lip    = 1.2;   // thickness at the very edges. Keeps the toe printable instead of a 0mm feather\n\n/* [Printer] */\nbed_x       = 250;   // usable bed along the run.   X1C is 256; 250 leaves margin\nbed_y       = 250;   // usable bed across the width. A MK4 would be 244 x 204\n\n/* [Joints] */\ntab_depth   = 12;\ntab_neck    = 18;    // width where the dovetail meets the tile (narrow)\ntab_tip     = 26;    // width at the tip (wide -> locks)\nfit         = 0.35;  // clearance cut into the matching socket, per side\nmin_tab_h   = 10;    // skip dovetails where the hill is shorter than this\n\n/* [Ground spikes] */\nspike_len     = 0;    // spike protrusion below the tile, mm. 0 = no sockets at all\nsocket_r      = 7.3;  // socket circumradius (12-sided blind hole)\nsocket_depth  = 11;\nsocket_roof   = 5;    // material left between socket ceiling and riding surface\nsocket_gon    = 12;\nspike_inset   = 30;   // keep sockets clear of tile edges and their dovetails\nspike_scan    = 10;   // grid the tile is searched on for its thickest point\nspike_minor   = 6.5;  // thread core radius\nspike_major   = 7.45; // thread crest radius -- bites into the plain socket wall\nspike_pitch   = 3.0;\nspike_stud    = 10;\nspike_chamfer = 1.5;\nspike_flange_r= 9.0;  // hex flange, circumradius. Grip it to screw the spike in\nspike_flange_h= 1.5;\nspike_cone_r  = 7.5;\nspike_tip_r   = 0.6;\n\n/* [Grip] */\ngrip_depth  = 0;     // 0 = smooth. 0.6 gives shallow traction grooves\ngrip_pitch  = 14;\ngrip_width  = 4;\n\n/* [Output] */\npart   = \"tile\";     // \"tile\" | \"hill\" | \"mono\" | \"spike\"\ntile_i = 0;          // tile index along the run\ntile_j = 0;          // tile index across the width\n\n/* [Hidden] */\n$fn = 32;\nSTEPS = 160;         // profile resolution\nBIG   = 1000;\n\n// ---------------------------------------------------------------- tiling ----\n// Tiles carry a dovetail past their nominal pitch, so the printable span is the\n// bed less one tab. Beds are often oblong, so lay the grid out both ways round\n// and keep whichever needs fewer plates.\nbx = max(1, bed_x - tab_depth);\nby = max(1, bed_y - tab_depth);\nnx_a = max(1, ceil(hill_length / bx));  ny_a = max(1, ceil(hill_width / by));\nnx_b = max(1, ceil(hill_length / by));  ny_b = max(1, ceil(hill_width / bx));\nturned = nx_b * ny_b < nx_a * ny_a;\n\nnx = turned ? nx_b : nx_a;\nny = turned ? ny_b : ny_a;\npx = hill_length / nx;   // tile pitch along the run\npy = hill_width  / ny;   // tile pitch across the width\n\n// ---------------------------------------------------------------- profile ---\n// Lengthwise: raised cosine, zero slope at both toes and at the crest.\nfunction prof_x(x) =\n    edge_lip + (hill_height - edge_lip) / 2 * (1 - cos(360 * humps * x / hill_length));\n\n// Crosswise: flat in the middle, tapering to the floor over bevel_run.\nfunction prof_y(y) =\n    bevel_run <= 0\n      ? hill_height\n      : edge_lip + (hill_height - edge_lip)\n          * min(1, max(0, min(y, hill_width - y) / bevel_run));\n\nfunction h_at(x, y) = min(prof_x(x), prof_y(y));\n\n// ------------------------------------------------------------ hill solid ----\nmodule hill_solid() {\n    intersection() {\n        // lengthwise profile, swept across the width\n        translate([0, hill_width + BIG, 0])\n            rotate([90, 0, 0])\n                linear_extrude(hill_width + 2 * BIG)\n                    polygon(concat(\n                        [[0, 0]],\n                        [for (i = [0 : STEPS])\n                            let (x = i * hill_length / STEPS) [x, prof_x(x)]],\n                        [[hill_length, 0]]\n                    ));\n\n        // crosswise profile, swept along the run\n        translate([-BIG, 0, 0])\n            rotate([0, 0, 90]) rotate([90, 0, 0])\n                linear_extrude(hill_length + 2 * BIG)\n                    polygon(concat(\n                        [[0, 0]],\n                        [for (i = [0 : STEPS])\n                            let (y = i * hill_width / STEPS) [y, prof_y(y)]],\n                        [[hill_width, 0]]\n                    ));\n    }\n}\n\n// --------------------------------------------------------------- dovetail ---\n// 2D dovetail pointing +X, root centred on the origin.\nmodule dovetail_2d(grow = 0) {\n    offset(delta = grow)\n        polygon([[0, -tab_neck / 2],\n                 [tab_depth,  -tab_tip / 2],\n                 [tab_depth,   tab_tip / 2],\n                 [0,  tab_neck / 2]]);\n}\n\n// How many dovetails fit on a seam of the given span, and where.\nfunction n_tabs(span) = max(1, round(span / 120));\nfunction tab_pos(span, k) = (k + 0.5) * span / n_tabs(span);\n\n// Seam at constant x = xs, running in y from y0 to y0+span.\n// Only keep tabs where there is enough material to make them worthwhile.\nfunction xseam_tabs(xs, y0, span) =\n    [for (k = [0 : n_tabs(span) - 1])\n        let (p = y0 + tab_pos(span, k))\n        if (h_at(xs, p) >= min_tab_h) p];\n\n// Seam at constant y = ys, running in x from x0 to x0+span.\nfunction yseam_tabs(ys, x0, span) =\n    [for (k = [0 : n_tabs(span) - 1])\n        let (p = x0 + tab_pos(span, k))\n        if (h_at(p, ys) >= min_tab_h) p];\n\n// ------------------------------------------------------- tile footprint -----\n// Plan-view outline of tile (i,j): the rectangle, plus dovetails on its +X and\n// +Y seams, minus sockets on its -X and -Y seams. Neighbours therefore always\n// agree, and every tile still drops straight down into place.\nmodule tile_footprint(i, j) {\n    x0 = i * px;  x1 = (i + 1) * px;\n    y0 = j * py;  y1 = (j + 1) * py;\n\n    difference() {\n        union() {\n            square([px, py]);\n\n            if (i < nx - 1)\n                for (p = xseam_tabs(x1, y0, py))\n                    translate([px, p - y0]) dovetail_2d();\n\n            if (j < ny - 1)\n                for (p = yseam_tabs(y1, x0, px))\n                    translate([p - x0, py]) rotate(90) dovetail_2d();\n        }\n\n        if (i > 0)\n            for (p = xseam_tabs(x0, y0, py))\n                translate([0, p - y0]) dovetail_2d(fit);\n\n        if (j > 0)\n            for (p = yseam_tabs(y0, x0, px))\n                translate([p - x0, 0]) rotate(90) dovetail_2d(fit);\n    }\n}\n\nmodule tile_prism(i, j, inset = 0) {\n    translate([i * px, j * py, -BIG / 2])\n        linear_extrude(BIG)\n            offset(delta = -inset)\n                tile_footprint(i, j);\n}\n\n// --------------------------------------------------------- spike sockets ----\n// One socket per tile, at the thickest point of the area that clears the tile\n// edges and their dovetails. Tiles too thin to swallow one simply get none.\nfunction spike_cands(i, j) =\n    let (x0 = i * px + spike_inset, x1 = (i + 1) * px - spike_inset,\n         y0 = j * py + spike_inset, y1 = (j + 1) * py - spike_inset)\n    (x1 < x0 || y1 < y0) ? []\n    : [for (a = [0 : floor((x1 - x0) / spike_scan)],\n            b = [0 : floor((y1 - y0) / spike_scan)])\n         let (x = x0 + a * spike_scan, y = y0 + b * spike_scan) [x, y, h_at(x, y)]];\n\nfunction spike_spot(i, j) =\n    let (c = spike_cands(i, j))\n    len(c) == 0 ? []\n    : let (best = max([for (q = c) q[2]]))\n      best < socket_depth + socket_roof ? []\n      : [ [for (q = c) if (q[2] >= best - 1e-9) [q[0], q[1]]][0] ];\n\nmodule spike_sockets(i, j) {\n    if (spike_len > 0)\n        for (q = spike_spot(i, j))\n            translate([q[0], q[1], -1])\n                cylinder(h = socket_depth + 1, r = socket_r, $fn = socket_gon);\n}\n\n// The spike itself. Printed stud-down, tapering upward, so nothing overhangs.\n// Its coarse thread forms its own groove in the plain socket and backs out again.\nfunction thread_profile(n = 72) =\n    [for (k = [0 : n - 1])\n        let (a = 360 * k / n, u = k / n, t = 1 - abs(2 * u - 1),\n             r = spike_minor + (spike_major - spike_minor) * t)\n        [r * cos(a), r * sin(a)]];\n\nmodule spike_part() {\n    zf = spike_stud + spike_chamfer;\n    zt = zf + spike_flange_h;\n    union() {\n        linear_extrude(height = spike_stud, twist = -360 * spike_stud / spike_pitch,\n                       slices = ceil(spike_stud * 8), convexity = 8)\n            polygon(thread_profile());\n        translate([0, 0, spike_stud])\n            cylinder(h = spike_chamfer, r1 = spike_major, r2 = spike_flange_r, $fn = 6);\n        translate([0, 0, zf]) cylinder(h = spike_flange_h, r = spike_flange_r, $fn = 6);\n        translate([0, 0, zt])\n            cylinder(h = max(0.1, spike_len), r1 = spike_cone_r, r2 = spike_tip_r, $fn = 48);\n    }\n}\n\n// ------------------------------------------------------------ grip combs ----\nmodule grip_cut() {\n    if (grip_depth > 0)\n        intersection() {\n            difference() {\n                hill_solid();\n                translate([0, 0, -grip_depth]) hill_solid();\n            }\n            for (x = [grip_pitch : grip_pitch : hill_length - grip_pitch])\n                translate([x - grip_width / 2, -BIG / 2, -BIG / 2])\n                    cube([grip_width, BIG, BIG]);\n        }\n}\n\n// ----------------------------------------------------------------- tiles ----\nmodule tile_solid(i, j) {\n    difference() {\n        intersection() { hill_solid(); tile_prism(i, j); }\n        grip_cut();\n        spike_sockets(i, j);\n    }\n}\n\nmodule tile(i, j) {\n    translate([-i * px, -j * py, 0])       // drop it on the origin for printing\n        tile_solid(i, j);\n}\n\n// ------------------------------------------------------------------ main ----\nif (part == \"hill\")\n    for (i = [0 : nx - 1], j = [0 : ny - 1])\n        translate([i * px, j * py, 0]) tile(i, j);\nelse if (part == \"spike\")\n    spike_part();\nelse if (part == \"mono\")          // uncut hill, for checking the joints\n    difference() { hill_solid(); grip_cut(); }\nelse\n    tile(tile_i, tile_j);\n\necho(str(\"tiles: \", nx, \" x \", ny, \" = \", nx * ny,\n         \"   pitch \", px, \" x \", py,\n         \"   printed extent up to \", px + tab_depth, \" x \", py + tab_depth,\n         \"   max slope \", atan(PI * humps * (hill_height - edge_lip) / hill_length), \" deg\"));\n";</script>
+<script>window.SCAD_SOURCE = "// ============================================================================\n//  bikeramp.scad  --  printable coasting hill for a toddler balance bike\n//\n//  Generates a smooth cosine \"roller\" hill, auto-split into bed-sized tiles\n//  that lock together with drop-in dovetails.\n//\n//  Render one tile:   openscad -D 'part=\"tile\"' -D tile_i=0 -D tile_j=0 -o t.stl bikeramp.scad\n//  Preview the hill:  openscad -D 'part=\"hill\"' bikeramp.scad\n//  See ./render.sh for batch export.\n// ============================================================================\n\n/* [Hill] */\nshape       = \"roller\";  // \"roller\" = up and back down\n                         // \"drop\"   = rise, flat deck, then a vertical step off\n                         // \"kicker\" = curved launch, steepest at the lip\ndeck        = 150;   // drop only: flat run before the edge (mm)\nhill_length = 600;   // total run, front toe to back toe (mm)\nhill_width  = 300;   // riding width (mm)\nhill_height = 45;    // crest height (mm)\nhumps       = 1;     // 1 = single hill, 2 = camel back, ...\nbevel_run   = 90;    // side taper: outer this-many mm slope down to the floor. 0 = vertical sides\nedge_lip    = 1.2;   // thickness at the very edges. Keeps the toe printable instead of a 0mm feather\n\n/* [Printer] */\nbed_x       = 250;   // usable bed along the run.   X1C is 256; 250 leaves margin\nbed_y       = 250;   // usable bed across the width. A MK4 would be 244 x 204\n\n/* [Joints] */\ntab_depth   = 12;\ntab_neck    = 18;    // width where the dovetail meets the tile (narrow)\ntab_tip     = 26;    // width at the tip (wide -> locks)\nfit         = 0.35;  // clearance cut into the matching socket, per side\nmin_tab_h   = 10;    // skip dovetails where the hill is shorter than this\n\n/* [Ground spikes] */\nspike_len     = 0;    // spike protrusion below the tile, mm. 0 = no sockets at all\nsocket_r      = 7.3;  // socket circumradius (12-sided blind hole)\nsocket_depth  = 11;\nsocket_roof   = 5;    // material left between socket ceiling and riding surface\nsocket_gon    = 12;\nspike_inset   = 30;   // keep sockets clear of tile edges and their dovetails\nspike_scan    = 10;   // grid the tile is searched on for its thickest point\nspike_minor   = 6.5;  // thread core radius\nspike_major   = 7.45; // thread crest radius -- bites into the plain socket wall\nspike_pitch   = 3.0;\nspike_stud    = 10;\nspike_chamfer = 1.5;\nspike_flange_r= 9.0;  // hex flange, circumradius. Grip it to screw the spike in\nspike_flange_h= 1.5;\nspike_cone_r  = 7.5;\nspike_tip_r   = 0.6;\n\n/* [Grip] */\ngrip_depth  = 0;     // 0 = smooth. 0.6 gives shallow traction grooves\ngrip_pitch  = 14;\ngrip_width  = 4;\n\n/* [Output] */\npart   = \"tile\";     // \"tile\" | \"hill\" | \"mono\" | \"spike\"\ntile_i = 0;          // tile index along the run\ntile_j = 0;          // tile index across the width\n\n/* [Hidden] */\n$fn = 32;\nSTEPS = 160;         // profile resolution\nBIG   = 1000;\n\n// ---------------------------------------------------------------- tiling ----\n// Tiles carry a dovetail past their nominal pitch, so the printable span is the\n// bed less one tab. Beds are often oblong, so lay the grid out both ways round\n// and keep whichever needs fewer plates.\nbx = max(1, bed_x - tab_depth);\nby = max(1, bed_y - tab_depth);\nnx_a = max(1, ceil(hill_length / bx));  ny_a = max(1, ceil(hill_width / by));\nnx_b = max(1, ceil(hill_length / by));  ny_b = max(1, ceil(hill_width / bx));\nturned = nx_b * ny_b < nx_a * ny_a;\n\nnx = turned ? nx_b : nx_a;\nny = turned ? ny_b : ny_a;\npx = hill_length / nx;   // tile pitch along the run\npy = hill_width  / ny;   // tile pitch across the width\n\n// ---------------------------------------------------------------- profile ---\n// Three lengthwise profiles. \"roller\" returns to the ground; \"drop\" and\n// \"kicker\" both finish at full height, so the far end is a vertical face.\nfunction prof_x(x) =\n    let (h = hill_height - edge_lip, L = hill_length)\n    shape == \"drop\"\n      ? let (rise = max(1, L - min(deck, L * 0.8)))\n        (x >= rise ? hill_height\n                   : edge_lip + h * 0.5 * (1 - cos(180 * min(1, max(0, x / rise)))))\n  : shape == \"kicker\"\n      ? (h < 0.01 ? edge_lip\n         : let (R = (L * L + h * h) / (2 * h), xx = min(max(x, 0), L))\n           edge_lip + R - sqrt(max(0, R * R - xx * xx)))\n  : edge_lip + h / 2 * (1 - cos(360 * humps * x / L));\n\n// Steepest gradient the rider meets: the lip on a kicker, the approach on a drop.\nfunction max_slope() =\n    let (h = hill_height - edge_lip, L = hill_length)\n    shape == \"drop\"   ? atan(PI * h / (2 * max(1, L - min(deck, L * 0.8))))\n  : shape == \"kicker\" ? (h < 0.01 ? 0\n                         : let (R = (L * L + h * h) / (2 * h))\n                           atan(L / max(1e-9, R - h)))\n  : atan(PI * humps * h / L);\n\n// Crosswise: flat in the middle, tapering to the floor over bevel_run.\nfunction prof_y(y) =\n    bevel_run <= 0\n      ? hill_height\n      : edge_lip + (hill_height - edge_lip)\n          * min(1, max(0, min(y, hill_width - y) / bevel_run));\n\nfunction h_at(x, y) = min(prof_x(x), prof_y(y));\n\n// ------------------------------------------------------------ hill solid ----\nmodule hill_solid() {\n    intersection() {\n        // lengthwise profile, swept across the width\n        translate([0, hill_width + BIG, 0])\n            rotate([90, 0, 0])\n                linear_extrude(hill_width + 2 * BIG)\n                    polygon(concat(\n                        [[0, 0]],\n                        [for (i = [0 : STEPS])\n                            let (x = i * hill_length / STEPS) [x, prof_x(x)]],\n                        [[hill_length, 0]]\n                    ));\n\n        // crosswise profile, swept along the run\n        translate([-BIG, 0, 0])\n            rotate([0, 0, 90]) rotate([90, 0, 0])\n                linear_extrude(hill_length + 2 * BIG)\n                    polygon(concat(\n                        [[0, 0]],\n                        [for (i = [0 : STEPS])\n                            let (y = i * hill_width / STEPS) [y, prof_y(y)]],\n                        [[hill_width, 0]]\n                    ));\n    }\n}\n\n// --------------------------------------------------------------- dovetail ---\n// 2D dovetail pointing +X, root centred on the origin.\nmodule dovetail_2d(grow = 0) {\n    offset(delta = grow)\n        polygon([[0, -tab_neck / 2],\n                 [tab_depth,  -tab_tip / 2],\n                 [tab_depth,   tab_tip / 2],\n                 [0,  tab_neck / 2]]);\n}\n\n// How many dovetails fit on a seam of the given span, and where.\nfunction n_tabs(span) = max(1, round(span / 120));\nfunction tab_pos(span, k) = (k + 0.5) * span / n_tabs(span);\n\n// Seam at constant x = xs, running in y from y0 to y0+span.\n// Only keep tabs where there is enough material to make them worthwhile.\nfunction xseam_tabs(xs, y0, span) =\n    [for (k = [0 : n_tabs(span) - 1])\n        let (p = y0 + tab_pos(span, k))\n        if (h_at(xs, p) >= min_tab_h) p];\n\n// Seam at constant y = ys, running in x from x0 to x0+span.\nfunction yseam_tabs(ys, x0, span) =\n    [for (k = [0 : n_tabs(span) - 1])\n        let (p = x0 + tab_pos(span, k))\n        if (h_at(p, ys) >= min_tab_h) p];\n\n// ------------------------------------------------------- tile footprint -----\n// Plan-view outline of tile (i,j): the rectangle, plus dovetails on its +X and\n// +Y seams, minus sockets on its -X and -Y seams. Neighbours therefore always\n// agree, and every tile still drops straight down into place.\nmodule tile_footprint(i, j) {\n    x0 = i * px;  x1 = (i + 1) * px;\n    y0 = j * py;  y1 = (j + 1) * py;\n\n    difference() {\n        union() {\n            square([px, py]);\n\n            if (i < nx - 1)\n                for (p = xseam_tabs(x1, y0, py))\n                    translate([px, p - y0]) dovetail_2d();\n\n            if (j < ny - 1)\n                for (p = yseam_tabs(y1, x0, px))\n                    translate([p - x0, py]) rotate(90) dovetail_2d();\n        }\n\n        if (i > 0)\n            for (p = xseam_tabs(x0, y0, py))\n                translate([0, p - y0]) dovetail_2d(fit);\n\n        if (j > 0)\n            for (p = yseam_tabs(y0, x0, px))\n                translate([p - x0, 0]) rotate(90) dovetail_2d(fit);\n    }\n}\n\nmodule tile_prism(i, j, inset = 0) {\n    translate([i * px, j * py, -BIG / 2])\n        linear_extrude(BIG)\n            offset(delta = -inset)\n                tile_footprint(i, j);\n}\n\n// --------------------------------------------------------- spike sockets ----\n// One socket per tile, at the thickest point of the area that clears the tile\n// edges and their dovetails. Tiles too thin to swallow one simply get none.\nfunction spike_cands(i, j) =\n    let (x0 = i * px + spike_inset, x1 = (i + 1) * px - spike_inset,\n         y0 = j * py + spike_inset, y1 = (j + 1) * py - spike_inset)\n    (x1 < x0 || y1 < y0) ? []\n    : [for (a = [0 : floor((x1 - x0) / spike_scan)],\n            b = [0 : floor((y1 - y0) / spike_scan)])\n         let (x = x0 + a * spike_scan, y = y0 + b * spike_scan) [x, y, h_at(x, y)]];\n\nfunction spike_spot(i, j) =\n    let (c = spike_cands(i, j))\n    len(c) == 0 ? []\n    : let (best = max([for (q = c) q[2]]))\n      best < socket_depth + socket_roof ? []\n      : [ [for (q = c) if (q[2] >= best - 1e-9) [q[0], q[1]]][0] ];\n\nmodule spike_sockets(i, j) {\n    if (spike_len > 0)\n        for (q = spike_spot(i, j))\n            translate([q[0], q[1], -1])\n                cylinder(h = socket_depth + 1, r = socket_r, $fn = socket_gon);\n}\n\n// The spike itself. Printed stud-down, tapering upward, so nothing overhangs.\n// Its coarse thread forms its own groove in the plain socket and backs out again.\nfunction thread_profile(n = 72) =\n    [for (k = [0 : n - 1])\n        let (a = 360 * k / n, u = k / n, t = 1 - abs(2 * u - 1),\n             r = spike_minor + (spike_major - spike_minor) * t)\n        [r * cos(a), r * sin(a)]];\n\nmodule spike_part() {\n    zf = spike_stud + spike_chamfer;\n    zt = zf + spike_flange_h;\n    union() {\n        linear_extrude(height = spike_stud, twist = -360 * spike_stud / spike_pitch,\n                       slices = ceil(spike_stud * 8), convexity = 8)\n            polygon(thread_profile());\n        translate([0, 0, spike_stud])\n            cylinder(h = spike_chamfer, r1 = spike_major, r2 = spike_flange_r, $fn = 6);\n        translate([0, 0, zf]) cylinder(h = spike_flange_h, r = spike_flange_r, $fn = 6);\n        translate([0, 0, zt])\n            cylinder(h = max(0.1, spike_len), r1 = spike_cone_r, r2 = spike_tip_r, $fn = 48);\n    }\n}\n\n// ------------------------------------------------------------ grip combs ----\nmodule grip_cut() {\n    if (grip_depth > 0)\n        intersection() {\n            difference() {\n                hill_solid();\n                translate([0, 0, -grip_depth]) hill_solid();\n            }\n            for (x = [grip_pitch : grip_pitch : hill_length - grip_pitch])\n                translate([x - grip_width / 2, -BIG / 2, -BIG / 2])\n                    cube([grip_width, BIG, BIG]);\n        }\n}\n\n// ----------------------------------------------------------------- tiles ----\nmodule tile_solid(i, j) {\n    difference() {\n        intersection() { hill_solid(); tile_prism(i, j); }\n        grip_cut();\n        spike_sockets(i, j);\n    }\n}\n\nmodule tile(i, j) {\n    translate([-i * px, -j * py, 0])       // drop it on the origin for printing\n        tile_solid(i, j);\n}\n\n// ------------------------------------------------------------------ main ----\nif (part == \"hill\")\n    for (i = [0 : nx - 1], j = [0 : ny - 1])\n        translate([i * px, j * py, 0]) tile(i, j);\nelse if (part == \"spike\")\n    spike_part();\nelse if (part == \"mono\")          // uncut hill, for checking the joints\n    difference() { hill_solid(); grip_cut(); }\nelse\n    tile(tile_i, tile_j);\n\necho(str(\"tiles: \", nx, \" x \", ny, \" = \", nx * ny,\n         \"   pitch \", px, \" x \", py,\n         \"   printed extent up to \", px + tab_depth, \" x \", py + tab_depth,\n         \"   \", shape, \" max slope \", max_slope(), \" deg\"));\n";</script>
 <script>(function () {
   'use strict';
   var BR = window.BikeRamp;
@@ -911,11 +947,28 @@ input[type=range]::-moz-range-thumb {
   var result = null;
 
   var PRESETS = {
-    'First hill':  { hillLength:600, hillWidth:300, hillHeight:45, humps:1, bevelRun:90 },
-    'Taller':      { hillLength:800, hillWidth:340, hillHeight:70, humps:1, bevelRun:100 },
-    'Camel back':  { hillLength:1000, hillWidth:300, hillHeight:50, humps:2, bevelRun:90 },
-    'Wide & low':  { hillLength:700, hillWidth:480, hillHeight:35, humps:1, bevelRun:130 }
+    'First hill':  { shape:'roller', hillLength:600, hillWidth:300, hillHeight:45,
+                     humps:1, bevelRun:90 },
+    'Taller':      { shape:'roller', hillLength:800, hillWidth:340, hillHeight:70,
+                     humps:1, bevelRun:100 },
+    'Camel back':  { shape:'roller', hillLength:1000, hillWidth:300, hillHeight:50,
+                     humps:2, bevelRun:90 },
+    'Wide & low':  { shape:'roller', hillLength:700, hillWidth:480, hillHeight:35,
+                     humps:1, bevelRun:130 },
+    'Step drop':   { shape:'drop', hillLength:500, hillWidth:300, hillHeight:50,
+                     deck:150, bevelRun:90 },
+    'Little jump': { shape:'kicker', hillLength:350, hillWidth:300, hillHeight:40,
+                     bevelRun:90 }
   };
+
+  var SHAPES = [
+    { v:'roller', label:'Roller',
+      hint:'Up and back down. Nothing to catch a wheel at either end.' },
+    { v:'drop',   label:'Step drop',
+      hint:'Rises, runs flat, then stops at a vertical edge. Height is the drop.' },
+    { v:'kicker', label:'Curved jump',
+      hint:'Curved launch, steepest at the lip, vertical behind it.' }
+  ];
 
   // Nominal bed sizes; BED_MARGIN comes off each axis for clearance at the edge.
   var BED_MARGIN = 6;
@@ -943,13 +996,17 @@ input[type=range]::-moz-range-thumb {
                    '#E8E4DC','#2A2E30'];
 
   var CONTROLS = [
-    { group:'Hill', items:[
+    { group:'Hill', custom:'shape', items:[
       { k:'hillLength', label:'Length',     min:250, max:2000, step:10, unit:'mm',
         hint:'Toe to toe. Longer is gentler.' },
+      { k:'deck',       label:'Deck',       min:30,  max:400,  step:10, unit:'mm',
+        hint:'Flat run between the top of the rise and the edge.',
+        show:function () { return state.shape === 'drop'; } },
       { k:'hillWidth',  label:'Width',      min:150, max:900,  step:10, unit:'mm' },
       { k:'hillHeight', label:'Height',     min:15,  max:150,  step:1,  unit:'mm' },
       { k:'humps',      label:'Humps',      min:1,   max:4,    step:1,  unit:'',
-        hint:'More than one? Add length to match, or it gets steep.' },
+        hint:'More than one? Add length to match, or it gets steep.',
+        show:function () { return state.shape === 'roller'; } },
       { k:'bevelRun',   label:'Side taper', min:0,   max:250,  step:5,  unit:'mm',
         hint:'How far the sides slope down to the floor. 0 gives a cliff edge.' }
     ]},
@@ -974,6 +1031,8 @@ input[type=range]::-moz-range-thumb {
   function rebuild() {
     result = BR.build(state);
     result.estimate = BR.estimate(result.total, { infill: state.infill });
+    applyVisibility();
+    syncShape();
     renderReadouts();
     renderTiles();
     gl.upload(buildBuffers());
@@ -1254,6 +1313,7 @@ input[type=range]::-moz-range-thumb {
       b.map(function (v) { return Math.round(v); }).join(' \u00d7 ') +
       ' <span class="tag ' + (r.fits ? 'ok' : 'crit') + '">' +
       (r.fits ? 'fits' : '+' + Math.ceil(over) + 'mm over') + '</span>';
+    $('#ro-slope-label').textContent = r.slopeLabel;
     $('#ro-slope').innerHTML = r.slope.toFixed(1) + '\u00b0' +
       '<span class="sub">' + slopeWord(r.slope) + '</span>';
     $('#ro-filament').innerHTML = (e.grams / 1000).toFixed(2) +
@@ -1369,6 +1429,41 @@ input[type=range]::-moz-range-thumb {
     bedInputs.y.value = state.bedY;
   }
 
+  function shapePicker() {
+    var wrap = document.createDocumentFragment();
+    var c = el('div', 'ctrl');
+    var chips = el('div', 'chips');
+    var hint = el('p', 'hint');
+    SHAPES.forEach(function (sh) {
+      var b = el('button', 'chip', sh.label);
+      b.type = 'button';
+      b.setAttribute('aria-pressed', String(state.shape === sh.v));
+      b.addEventListener('click', function () {
+        state.shape = sh.v;
+        Array.prototype.forEach.call(chips.children, function (o) {
+          o.setAttribute('aria-pressed', String(o === b));
+        });
+        syncInputs(); rebuild(); markPreset();
+      });
+      chips.appendChild(b);
+    });
+    c.appendChild(chips);
+    c.appendChild(hint);
+    wrap.appendChild(c);
+    shapeChips = { chips: chips, hint: hint };
+    return wrap;
+  }
+
+  var shapeChips = null;
+  function syncShape() {
+    if (!shapeChips) return;
+    SHAPES.forEach(function (sh, i) {
+      shapeChips.chips.children[i]
+        .setAttribute('aria-pressed', String(state.shape === sh.v));
+      if (state.shape === sh.v) shapeChips.hint.textContent = sh.hint;
+    });
+  }
+
   function spikeGroup() {
     var host = document.createDocumentFragment();
     var sg = el('div', 'group');
@@ -1420,6 +1515,7 @@ input[type=range]::-moz-range-thumb {
       var g = el('div', 'group');
       g.appendChild(el('h2', null, grp.group));
       if (grp.custom === 'printer') g.appendChild(printerPicker());
+      if (grp.custom === 'shape') g.appendChild(shapePicker());
       grp.items.forEach(function (it) {
         var c = el('div', 'ctrl');
         var top = el('div', 'ctrl-top');
@@ -1442,6 +1538,7 @@ input[type=range]::-moz-range-thumb {
         c.appendChild(top); c.appendChild(rng);
         if (it.hint) c.appendChild(el('p', 'hint', it.hint));
         g.appendChild(c);
+        it._el = c;
 
         var set = function (v, from) {
           v = Math.min(it.max, Math.max(it.min, v));
@@ -1509,10 +1606,21 @@ input[type=range]::-moz-range-thumb {
       g.items.forEach(function (it) { if (it._set) it._set(state[it.k]); });
     });
   }
+  // Controls that only mean something for one shape are hidden for the others.
+  function applyVisibility() {
+    CONTROLS.forEach(function (g) {
+      g.items.forEach(function (it) {
+        if (it._el) it._el.style.display = !it.show || it.show() ? '' : 'none';
+      });
+    });
+  }
   function markPreset() {
     document.querySelectorAll('[data-preset]').forEach(function (c) {
       var p = PRESETS[c.dataset.preset];
-      var on = Object.keys(p).every(function (k) { return Math.abs(state[k] - p[k]) < 1e-9; });
+      var on = Object.keys(p).every(function (k) {
+        return typeof p[k] === 'string' ? state[k] === p[k]
+                                        : Math.abs(state[k] - p[k]) < 1e-9;
+      });
       c.setAttribute('aria-pressed', String(on));
     });
   }
@@ -1533,9 +1641,15 @@ input[type=range]::-moz-range-thumb {
     var r = result, e = r.estimate;
     return [
       'Balance-bike coasting hill', '',
-      'Hill        ' + Math.round(state.hillLength) + ' x ' + Math.round(state.hillWidth) +
-        ' x ' + Math.round(state.hillHeight) + ' mm, ' + state.humps + ' hump(s)',
-      'Max slope   ' + r.slope.toFixed(1) + ' deg (' + slopeWord(r.slope) + ')',
+      'Shape       ' + (state.shape === 'drop'
+        ? 'step drop -- rise, ' + state.deck + ' mm deck, then a ' +
+          Math.round(state.hillHeight) + ' mm vertical edge'
+        : state.shape === 'kicker'
+        ? 'curved jump -- launch ramp, vertical behind the lip'
+        : 'roller -- ' + state.humps + ' hump(s), up and back down'),
+      'Size        ' + Math.round(state.hillLength) + ' x ' + Math.round(state.hillWidth) +
+        ' x ' + Math.round(state.hillHeight) + ' mm',
+      r.slopeLabel.padEnd(11) + ' ' + r.slope.toFixed(1) + ' deg (' + slopeWord(r.slope) + ')',
       'Tiles       ' + r.tiles.length + '  (' + r.tiling.nx + ' along the run x ' +
         r.tiling.ny + ' across)',
       'Largest     ' + r.biggest.m.size.map(function (v) { return Math.round(v); }).join(' x ') +
@@ -1561,6 +1675,13 @@ input[type=range]::-moz-range-thumb {
       '  Sockets carry ' + state.fit.toFixed(2) + ' mm clearance per side. If a joint is',
       '  tight, pare the socket walls rather than reprinting.', '',
       'Before he rides it',
+    ].concat(state.shape === 'roller' ? [] : [
+      state.shape === 'drop'
+        ? '  This one ends in a ' + Math.round(state.hillHeight) +
+          ' mm vertical edge. Leave clear flat run-out past it,'
+        : '  This one launches. Leave clear flat run-out past the lip,',
+      '  and note the back of it is a wall if he rides at it the wrong way round.',
+    ]).concat([
       '  The dovetails hold tiles to each other but not to the ground. On a hard',
       '  floor the whole hill will skate. Stick rubber pads underneath, run a bead',
       '  of silicone caulk on the undersides, or set it on a rubber-backed rug.',
@@ -1575,7 +1696,7 @@ input[type=range]::-moz-range-thumb {
       '  bore, so the first turn is stiff -- grip the hex flange with pliers if',
       '  you need to. They back out again for indoor use.',
       '  With spikes fitted the hill stands about 3 mm off the ground.', ''
-    ] : []).join('\n');
+    ] : [])).join('\n');
   }
 
   function downloadZip() {
@@ -1593,6 +1714,7 @@ input[type=range]::-moz-range-thumb {
 
   function scadSource() {
     var map = {
+      shape: '"' + state.shape + '"', deck: state.deck,
       hill_length: state.hillLength, hill_width: state.hillWidth,
       hill_height: state.hillHeight, humps: state.humps, bevel_run: state.bevelRun,
       edge_lip: state.edgeLip, bed_x: state.bedX, bed_y: state.bedY,

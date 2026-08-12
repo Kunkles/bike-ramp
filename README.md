@@ -2,8 +2,9 @@
 
 **→ [Open the generator](https://kunkles.github.io/bike-ramp/)**
 
-A smooth cosine "roller" hill for a toddler on a balance bike, split into
-tiles that fit your printer bed and lock together with drop-in dovetails.
+Printable features for a toddler on a balance bike — a roller hill, a step
+drop, or a little curved jump — split into tiles that fit your printer bed and
+lock together with drop-in dovetails.
 
 ![assembled](preview_hill.png)
 
@@ -114,6 +115,27 @@ concrete, do one of:
 
 Also check for a tile that rocks on an uneven floor before he rides it.
 
+## Shapes
+
+| | |
+|---|---|
+| **Roller** | Up and back down. Zero slope at both toes and at the crest, so there is nothing to catch a wheel. `humps: 2` gives a camel back. |
+| **Step drop** | Rises, runs flat along a deck, then stops at a vertical edge. `hill_height` *is* the drop. |
+| **Curved jump** | A circular arc tangent to the ground at the toe and steepest at the lip — so it launches — with a vertical face behind. |
+
+The drop and the jump both finish at full height, so the far end of the last
+tile is a vertical wall rather than a feathered toe. Two things follow from
+that: leave clear flat run-out past the edge, and remember the back of the
+thing is a wall if he rides at it the wrong way round. The side taper still
+applies, so the edge is highest in the middle and falls away at the sides.
+
+The app reports the number that matters for each: **max slope** for a roller,
+the **approach** gradient for a drop, and the **takeoff** angle for a jump.
+
+Starting points, all gentle: drop 500 × 300 × 50 with a 150 mm deck (12.4°
+approach), jump 350 × 300 × 40 (12.7° takeoff, ~0.6 kg and 16 h — much cheaper
+than the roller).
+
 ## Ground spikes
 
 On by default at ¼ inch; the **Underside** view in the app shows the sockets.
@@ -139,10 +161,12 @@ the option open.
 
 | Parameter | Default | Notes |
 |---|---|---|
+| `shape` | `"roller"` | `"roller"`, `"drop"` or `"kicker"` |
+| `deck` | 150 | drop only: flat run before the edge |
 | `hill_length` | 600 | longer = gentler |
 | `hill_width` | 300 | |
 | `hill_height` | 45 | |
-| `humps` | 1 | 2 gives a camel back — lengthen to match or it gets steep |
+| `humps` | 1 | roller only. 2 gives a camel back — lengthen to match or it gets steep |
 | `bevel_run` | 90 | side taper. 0 = vertical sides (don't, for a toddler) |
 | `edge_lip` | 1.2 | thickness at the toe. Keeps it printable instead of a 0 mm feather |
 | `bed_x` / `bed_y` | 250 / 250 | usable bed. Tiling is computed from these |
@@ -154,12 +178,14 @@ Beds are often oblong — a MK4 is 250 × 210 — so the tile grid is laid out b
 ways round and whichever needs fewer plates wins. A tile that only fits turned
 is flagged in the app.
 
-Max slope is `atan(π × humps × hill_height / hill_length)`, and `render.sh`
-echoes it for whatever you set. Some starting points:
+`render.sh` echoes the shape and its steepest gradient for whatever you set.
+Some starting points:
 
 ```bash
 ./render.sh -D hill_height=70 -D hill_length=800     # 15.1°, 8 tiles, taller
 ./render.sh -D humps=2 -D hill_length=1000 -D hill_height=50   # 17.0°, camel back, 10 tiles
+./render.sh -D 'shape="drop"' -D hill_length=500 -D hill_height=50 -D deck=150
+./render.sh -D 'shape="kicker"' -D hill_length=350 -D hill_height=40
 ./render.sh -D bed_x=244 -D bed_y=204                # Prusa MK4
 ./render.sh -D spike_len=6                           # add the spike sockets
 openscad -o spike.stl -D 'part="spike"' -D spike_len=6 bikeramp.scad
@@ -178,8 +204,11 @@ Geometry only — nothing here has been printed or ridden.
   and sockets are complementary, correctly placed, and nowhere overlapping.
 - The riding surface is continuous across every seam.
 - The generator's mesher agrees with OpenSCAD to within 0.15% on every tile
-  (0.06% with spike sockets, 0.21% on the spike itself), and its exported STLs
-  stay manifold after rounding to float32 (`node webapp/test.js`).
+  (0.06% with spike sockets, 0.05% on the drop and the jump, 0.21% on the spike
+  itself), and its exported STLs stay manifold after rounding to float32
+  (`node webapp/test.js`).
+- All three shapes stay watertight, including the vertical end face, across
+  extremes of height, deck length and zero side taper.
 - Spike sockets keep every tile watertight, and the volume they remove
   converges on the analytic bore as the mesh is refined (1.6% at the default
   8 mm cell, 0.08% at 1.5 mm — the residue is surface discretisation, not the

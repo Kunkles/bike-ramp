@@ -10,6 +10,10 @@
 // ============================================================================
 
 /* [Hill] */
+shape       = "roller";  // "roller" = up and back down
+                         // "drop"   = rise, flat deck, then a vertical step off
+                         // "kicker" = curved launch, steepest at the lip
+deck        = 150;   // drop only: flat run before the edge (mm)
 hill_length = 600;   // total run, front toe to back toe (mm)
 hill_width  = 300;   // riding width (mm)
 hill_height = 45;    // crest height (mm)
@@ -77,9 +81,28 @@ px = hill_length / nx;   // tile pitch along the run
 py = hill_width  / ny;   // tile pitch across the width
 
 // ---------------------------------------------------------------- profile ---
-// Lengthwise: raised cosine, zero slope at both toes and at the crest.
+// Three lengthwise profiles. "roller" returns to the ground; "drop" and
+// "kicker" both finish at full height, so the far end is a vertical face.
 function prof_x(x) =
-    edge_lip + (hill_height - edge_lip) / 2 * (1 - cos(360 * humps * x / hill_length));
+    let (h = hill_height - edge_lip, L = hill_length)
+    shape == "drop"
+      ? let (rise = max(1, L - min(deck, L * 0.8)))
+        (x >= rise ? hill_height
+                   : edge_lip + h * 0.5 * (1 - cos(180 * min(1, max(0, x / rise)))))
+  : shape == "kicker"
+      ? (h < 0.01 ? edge_lip
+         : let (R = (L * L + h * h) / (2 * h), xx = min(max(x, 0), L))
+           edge_lip + R - sqrt(max(0, R * R - xx * xx)))
+  : edge_lip + h / 2 * (1 - cos(360 * humps * x / L));
+
+// Steepest gradient the rider meets: the lip on a kicker, the approach on a drop.
+function max_slope() =
+    let (h = hill_height - edge_lip, L = hill_length)
+    shape == "drop"   ? atan(PI * h / (2 * max(1, L - min(deck, L * 0.8))))
+  : shape == "kicker" ? (h < 0.01 ? 0
+                         : let (R = (L * L + h * h) / (2 * h))
+                           atan(L / max(1e-9, R - h)))
+  : atan(PI * humps * h / L);
 
 // Crosswise: flat in the middle, tapering to the floor over bevel_run.
 function prof_y(y) =
@@ -272,4 +295,4 @@ else
 echo(str("tiles: ", nx, " x ", ny, " = ", nx * ny,
          "   pitch ", px, " x ", py,
          "   printed extent up to ", px + tab_depth, " x ", py + tab_depth,
-         "   max slope ", atan(PI * humps * (hill_height - edge_lip) / hill_length), " deg"));
+         "   ", shape, " max slope ", max_slope(), " deg"));

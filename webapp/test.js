@@ -115,7 +115,12 @@ console.log('\n3. tiling holds across configurations\n');
 for (const cfg of [{}, { hillHeight: 70, hillLength: 800 },
                    { humps: 2, hillLength: 1000, hillHeight: 50 },
                    { hillWidth: 450 }, { bevelRun: 0 }, { maxPrint: 180 },
-                   { hillLength: 250, hillWidth: 200, hillHeight: 25 }]) {
+                   { hillLength: 250, hillWidth: 200, hillHeight: 25 },
+                   { shape: 'drop', hillLength: 500, hillHeight: 50, deck: 150 },
+                   { shape: 'drop', hillLength: 300, hillHeight: 80, deck: 250,
+                     spikeLen: 6 },
+                   { shape: 'kicker', hillLength: 350, hillHeight: 40 },
+                   { shape: 'kicker', hillLength: 250, hillHeight: 90, spikeLen: 6 }]) {
   const b = BR.build(cfg);
   const leaks = b.tiles.reduce((s, t) => s + watertight(t.tris), 0);
   const big = Math.max(b.biggest.m.size[0], b.biggest.m.size[1]);
@@ -186,7 +191,17 @@ if (!haveOpenSCAD()) {
                               '-D', 'spike_len=6'],
      () => BR.build({ spikeLen: 6 }).tiles.find((t) => t.name === 'tile_00').m],
     ['spike, 13mm',          ['-D', 'part="spike"', '-D', 'spike_len=13'],
-     () => BR.measure(BR.spikeMesh({ spikeLen: 13 }))]
+     () => BR.measure(BR.spikeMesh({ spikeLen: 13 }))],
+    ['drop, tile 2,0',       ['-D', 'part="tile"', '-D', 'tile_i=2', '-D', 'tile_j=0',
+                              '-D', 'shape="drop"', '-D', 'hill_length=500',
+                              '-D', 'hill_height=50', '-D', 'deck=150'],
+     () => BR.build({ shape: 'drop', hillLength: 500, hillHeight: 50, deck: 150 })
+             .tiles.find((t) => t.name === 'tile_20').m],
+    ['kicker, tile 1,0',     ['-D', 'part="tile"', '-D', 'tile_i=1', '-D', 'tile_j=0',
+                              '-D', 'shape="kicker"', '-D', 'hill_length=350',
+                              '-D', 'hill_height=40'],
+     () => BR.build({ shape: 'kicker', hillLength: 350, hillHeight: 40 })
+             .tiles.find((t) => t.name === 'tile_10').m]
   ];
   for (const [label, args, jsFn] of cases) {
     const ref = scad(args), js = jsFn();
