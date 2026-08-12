@@ -1,0 +1,184 @@
+# Balance-bike coasting hill
+
+A smooth cosine "roller" hill for a toddler on a balance bike, split into
+tiles that fit a Bambu X1C and lock together with drop-in dovetails.
+
+![assembled](preview_hill.png)
+
+**Default hill:** 600 mm long × 300 mm wide × 45 mm tall, max slope **12.9°**.
+6 tiles, largest 212 × 162 × 45 mm, plus 6 screw-in ground spikes. Roughly
+**1.1 kg** of filament.
+
+The profile has zero slope at both toes and at the crest, so there is no edge to
+catch a wheel and no kick at the top — he rolls on, over, and off. The outer
+90 mm of each side tapers to the floor, so riding off the side is a slope rather
+than a drop.
+
+## Files
+
+| | |
+|---|---|
+| `webapp/coasting-hill.html` | **the generator** — sliders, live 3D, downloads the STLs as a zip |
+| `bikeramp.scad` | the same model in OpenSCAD; every dimension is a parameter at the top |
+| `render.sh` | exports all tiles to `stl/` |
+| `stl/tile_IJ.stl` | the default hill **without** spike sockets — also the test fixture. `I` = position along the run (0…2), `J` = across the width (0…1) |
+| `docs/index.html` | the same app as a standalone page, served by GitHub Pages |
+| `stlinfo.py` | bounding box + filament estimate for exported STLs |
+| `preview.py` | renders the STLs to a PNG |
+| `webapp/geom.js` | the model reimplemented as a mesh generator, shared by the app and the tests |
+| `webapp/test.js` | checks the mesher against OpenSCAD and proves every tile is watertight |
+| `webapp/build.py` | inlines everything into the single-file app |
+
+## The generator
+
+`webapp/coasting-hill.html` is a self-contained page — open it in a browser, no
+server or install. Pick your printer from the dropdown, drag the sliders, and it
+re-tiles live — showing tile count, largest tile against your bed, max slope,
+filament and print time — then hands you a zip of STLs plus a README and a
+matching `.scad`.
+
+```bash
+open webapp/coasting-hill.html
+```
+
+Rebuild it after editing anything under `webapp/`:
+
+```bash
+python3 webapp/build.py
+```
+
+## Or straight from OpenSCAD
+
+STLs for the default hill are already in `stl/`. To re-render with changes:
+
+```bash
+./render.sh -D hill_height=70 -D hill_length=800
+```
+
+## Printing
+
+Six plates, one tile each. **Slice `tile_10.stl` first** — it's the tallest and
+most expensive; its real time and weight tell you what the whole set costs.
+
+| Setting | Value |
+|---|---|
+| Material | **PLA indoors. PETG or ASA if it ever lives in a garage, car, or sun** |
+| Layer height | 0.28 mm (0.4 nozzle) |
+| Wall loops | 3 |
+| Top / bottom shells | 6 top, 4 bottom |
+| Infill | 15% gyroid |
+| Supports | none — every tile prints flat side down, no overhangs |
+| Brim | yes, ~5 mm |
+
+The PLA warning is the one that matters. PLA starts going soft around 55–60 °C
+and a hill sitting in a sunny garage or the back of a car will sag out of shape.
+Indoors it's fine.
+
+Why those shells: a 15 kg kid plus bike landing on one wheel is roughly 250 N on
+a contact patch around 150 mm², about 1.7 MPa. Gyroid at 15% carries that with
+around 4× margin, and 6 top layers (1.7 mm) keeps the surface from dimpling
+between infill cells. Dropping to 10% infill saves ~150 g and is still fine for
+a toddler; go to 20% if he's on the bigger side or you want it to survive adults
+standing on it.
+
+Expect somewhere around 35 hours total. That comes from the extruded volume at
+roughly 8 mm³/s average flow, not from a slicer — treat it as ±40% and check it
+against your first plate.
+
+## Assembly
+
+![tile](preview_tile.png)
+
+Tiles drop straight down into place; the dovetails are plan-view only, so any
+tile can go in at any time and nothing needs sliding. Lay them out 3 along the
+run × 2 across, matching the `tile_IJ` numbering, and press the seams together.
+Sockets are cut with 0.35 mm clearance — snug, not a hammer fit. If a joint is
+tight, a pass with a knife on the socket walls is quicker than reprinting; if
+your printer runs tight in general, re-render with `-D fit=0.5`.
+
+Label each tile as it comes off the plate. They all look similar and only one
+arrangement is right.
+
+**Stop it sliding.** The dovetails hold tiles to each other, but the assembly as
+a whole will skate on a hard floor when he rides at it, and that's the thing
+most likely to put him down. On carpet it's fine as-is. On hardwood, tile, or
+concrete, do one of:
+
+- stick adhesive rubber furniture pads under each tile, or
+- run a bead of silicone caulk on the undersides and let it cure into feet, or
+- put the whole thing on a rubber-backed rug.
+
+Also check for a tile that rocks on an uneven floor before he rides it.
+
+## Ground spikes
+
+On by default at ¼ inch; the **Underside** view in the app shows the sockets.
+Each tile thick enough to take one gets a single
+blind socket in its underside — a 14.6 mm twelve-sided bore, 11 mm deep, with at
+least 5 mm of deck left above it — and you print one screw-in spike per socket.
+The toes are only a millimetre or two thick so they get none; the dovetails tie
+them to the tiles that are pegged down.
+
+The socket is a plain bore. The spike's thread is coarse (3 mm pitch, 0.4 mm
+radial interference) and cuts its own groove going in, so the first turn is
+stiff — grip the hex flange with pliers if you need to — and it backs out again
+for indoor use. Print the spikes stud-down exactly as oriented, no supports,
+4 walls and 40% infill; they're 1–2 g each. With spikes fitted the hill stands
+about 3 mm off the ground.
+
+Spike length is ¼, ½ or 1 inch (6 / 13 / 25 mm). ¼ inch is plenty for lawn.
+Set it to **None** for a flat underside with no sockets at all — but the socket
+is a small blind hole in a part you are printing anyway, so leaving it in keeps
+the option open.
+
+## Changing the shape
+
+| Parameter | Default | Notes |
+|---|---|---|
+| `hill_length` | 600 | longer = gentler |
+| `hill_width` | 300 | |
+| `hill_height` | 45 | |
+| `humps` | 1 | 2 gives a camel back — lengthen to match or it gets steep |
+| `bevel_run` | 90 | side taper. 0 = vertical sides (don't, for a toddler) |
+| `edge_lip` | 1.2 | thickness at the toe. Keeps it printable instead of a 0 mm feather |
+| `bed_x` / `bed_y` | 250 / 250 | usable bed. Tiling is computed from these |
+| `fit` | 0.35 | dovetail socket clearance per side |
+| `spike_len` | 0 | ground spike protrusion. 6 / 13 / 25 for ¼ / ½ / 1 inch |
+| `grip_depth` | 0 | try 0.6 for shallow traction grooves across the surface |
+
+Beds are often oblong — a MK4 is 250 × 210 — so the tile grid is laid out both
+ways round and whichever needs fewer plates wins. A tile that only fits turned
+is flagged in the app.
+
+Max slope is `atan(π × humps × hill_height / hill_length)`, and `render.sh`
+echoes it for whatever you set. Some starting points:
+
+```bash
+./render.sh -D hill_height=70 -D hill_length=800     # 15.1°, 8 tiles, taller
+./render.sh -D humps=2 -D hill_length=1000 -D hill_height=50   # 17.0°, camel back, 10 tiles
+./render.sh -D bed_x=244 -D bed_y=204                # Prusa MK4
+./render.sh -D spike_len=6                           # add the spike sockets
+openscad -o spike.stl -D 'part="spike"' -D spike_len=6 bikeramp.scad
+```
+
+Keep it gentle. A hill he can't get up isn't fun, and 13° is already a steep
+driveway. Print the default, watch him ride it, then decide whether to go bigger.
+
+## What's been checked
+
+Geometry only — nothing here has been printed or ridden.
+
+- Every tile fits the X1C bed (largest 212 × 162 × 45 mm).
+- The six tiles sum to 4.81 cm³ *less* than the uncut hill, which matches the
+  calculated dovetail clearance volume (4.79 cm³) to within 0.5% — so the tabs
+  and sockets are complementary, correctly placed, and nowhere overlapping.
+- The riding surface is continuous across every seam.
+- The generator's mesher agrees with OpenSCAD to within 0.15% on every tile
+  (0.06% with spike sockets, 0.21% on the spike itself), and its exported STLs
+  stay manifold after rounding to float32 (`node webapp/test.js`).
+- Spike sockets keep every tile watertight, and the volume they remove
+  converges on the analytic bore as the mesh is refined (1.6% at the default
+  8 mm cell, 0.08% at 1.5 mm — the residue is surface discretisation, not the
+  socket).
+
+The shell/infill and print-time numbers above are analytical, not measured.

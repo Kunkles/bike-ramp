@@ -1,0 +1,1661 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Parametric generator for a printable balance-bike coasting hill: pick your printer, size the hill, download the STLs.">
+<meta name="color-scheme" content="light dark">
+<title>Coasting hill generator</title>
+<style>/* ---------------------------------------------------------------- tokens -- */
+:root {
+  --ground:#EDF0EE; --panel:#FFF; --panel-2:#F5F8F6; --sunk:#E4E9E6;
+  --line:#D3DAD6; --line-2:#E3E8E5;
+  --ink:#16201E; --ink-2:#54605C; --ink-3:#7E8A86;
+  --accent:#C9560A; --accent-2:#E9832F; --on-accent:#FFF;
+  --support:#2C6B60;
+  --ok:#2C7A5B; --warn:#9E5A05; --crit:#A32E22;
+  --vp-1:#E9EDEA; --vp-2:#D6DDD9;
+  --grid:#98A6A1;
+  --shadow:0 1px 2px rgba(22,32,30,.06), 0 8px 24px -12px rgba(22,32,30,.18);
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+}
+@media (prefers-color-scheme:dark) {
+  :root {
+    --ground:#0F1514; --panel:#171F1D; --panel-2:#1D2624; --sunk:#121917;
+    --line:#2A3533; --line-2:#212B29;
+    --ink:#E3EAE7; --ink-2:#98A5A0; --ink-3:#6B7874;
+    --accent:#F2812A; --accent-2:#F79B52; --on-accent:#1A1005;
+    --support:#57A294;
+    --ok:#4FA97F; --warn:#D08F35; --crit:#D65B4C;
+    --vp-1:#141C1A; --vp-2:#0A100F;
+    --grid:#3A4744;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -14px rgba(0,0,0,.7);
+  }
+}
+:root[data-theme="dark"] {
+  --ground:#0F1514; --panel:#171F1D; --panel-2:#1D2624; --sunk:#121917;
+  --line:#2A3533; --line-2:#212B29;
+  --ink:#E3EAE7; --ink-2:#98A5A0; --ink-3:#6B7874;
+  --accent:#F2812A; --accent-2:#F79B52; --on-accent:#1A1005;
+  --support:#57A294;
+  --ok:#4FA97F; --warn:#D08F35; --crit:#D65B4C;
+  --vp-1:#141C1A; --vp-2:#0A100F;
+  --grid:#3A4744;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -14px rgba(0,0,0,.7);
+}
+:root[data-theme="light"] {
+  --ground:#EDF0EE; --panel:#FFF; --panel-2:#F5F8F6; --sunk:#E4E9E6;
+  --line:#D3DAD6; --line-2:#E3E8E5;
+  --ink:#16201E; --ink-2:#54605C; --ink-3:#7E8A86;
+  --accent:#C9560A; --accent-2:#E9832F; --on-accent:#FFF;
+  --support:#2C6B60;
+  --ok:#2C7A5B; --warn:#9E5A05; --crit:#A32E22;
+  --vp-1:#E9EDEA; --vp-2:#D6DDD9;
+  --grid:#98A6A1;
+  --shadow:0 1px 2px rgba(22,32,30,.06), 0 8px 24px -12px rgba(22,32,30,.18);
+}
+
+:root { color-scheme:light; }
+@media (prefers-color-scheme:dark) { :root { color-scheme:dark; } }
+:root[data-theme="dark"] { color-scheme:dark; }
+:root[data-theme="light"] { color-scheme:light; }
+
+* { box-sizing:border-box; }
+body {
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:var(--sans); font-size:14px; line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+}
+:focus-visible { outline:2px solid var(--accent); outline-offset:2px; border-radius:2px; }
+
+/* ----------------------------------------------------------------- shell -- */
+.app { display:grid; grid-template-columns:352px minmax(0,1fr); height:100dvh; }
+
+.rail {
+  background:var(--panel); border-right:1px solid var(--line);
+  display:flex; flex-direction:column; min-height:0;
+}
+.rail-scroll { overflow-y:auto; flex:1; min-height:0; padding:0 20px 20px; }
+
+.brand { padding:18px 20px 14px; border-bottom:1px solid var(--line-2); }
+.brand h1 {
+  margin:0; font-family:var(--mono); font-size:15px; font-weight:600;
+  letter-spacing:-.02em; display:flex; align-items:baseline; gap:8px;
+}
+.brand h1 .mark { color:var(--accent); }
+.brand p { margin:5px 0 0; font-size:12.5px; color:var(--ink-2); max-width:34ch; }
+
+/* --------------------------------------------------------------- controls -- */
+.group { margin-top:22px; }
+.group > h2 {
+  margin:0 0 12px; font-family:var(--mono); font-size:10.5px; font-weight:600;
+  letter-spacing:.13em; text-transform:uppercase; color:var(--ink-3);
+  display:flex; align-items:center; gap:10px;
+}
+.group > h2::after { content:""; flex:1; height:1px; background:var(--line-2); }
+
+.ctrl { display:grid; gap:6px; margin-bottom:16px; }
+.ctrl-top { display:flex; align-items:baseline; justify-content:space-between; gap:10px; }
+.ctrl-top label { font-size:13px; color:var(--ink); }
+.ctrl-val {
+  font-family:var(--mono); font-size:12.5px; font-variant-numeric:tabular-nums;
+  color:var(--ink-2); display:flex; align-items:baseline; gap:3px;
+}
+.ctrl-val input {
+  width:4.6em; text-align:right; font:inherit; color:var(--ink);
+  background:var(--sunk); border:1px solid transparent; border-radius:4px;
+  padding:2px 5px; -moz-appearance:textfield;
+}
+.ctrl-val input::-webkit-outer-spin-button,
+.ctrl-val input::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
+.ctrl-val input:hover { border-color:var(--line); }
+.ctrl-val input:focus { border-color:var(--accent); background:var(--panel); outline:none; }
+.ctrl-val .u { color:var(--ink-3); font-size:11px; width:2.1em; }
+
+input[type=range] {
+  -webkit-appearance:none; appearance:none; width:100%; height:18px;
+  background:transparent; margin:0; cursor:ew-resize;
+}
+input[type=range]::-webkit-slider-runnable-track {
+  height:3px; border-radius:2px;
+  background:linear-gradient(to right,var(--accent) var(--fill,50%),var(--sunk) var(--fill,50%));
+}
+input[type=range]::-moz-range-track { height:3px; border-radius:2px; background:var(--sunk); }
+input[type=range]::-moz-range-progress { height:3px; border-radius:2px; background:var(--accent); }
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance:none; width:15px; height:15px; margin-top:-6px; border-radius:50%;
+  background:var(--panel); border:2px solid var(--accent); box-shadow:var(--shadow);
+}
+input[type=range]::-moz-range-thumb {
+  width:13px; height:13px; border-radius:50%; background:var(--panel);
+  border:2px solid var(--accent); box-shadow:var(--shadow);
+}
+.hint { font-size:11.5px; color:var(--ink-3); margin:-1px 0 0; }
+
+/* --------------------------------------------------------------- presets -- */
+.chips { display:flex; flex-wrap:wrap; gap:6px; }
+.chip {
+  font:inherit; font-size:12px; padding:5px 10px; border-radius:999px; cursor:pointer;
+  background:var(--panel-2); color:var(--ink-2);
+  border:1px solid var(--line); transition:background .12s, color .12s, border-color .12s;
+}
+.chip:hover { background:var(--sunk); color:var(--ink); }
+.chip[aria-pressed="true"] { background:var(--accent); border-color:var(--accent); color:var(--on-accent); }
+
+.swatches { display:flex; gap:7px; flex-wrap:wrap; }
+.swatch {
+  width:26px; height:26px; border-radius:50%; cursor:pointer; padding:0;
+  border:1px solid rgba(0,0,0,.18); box-shadow:inset 0 -3px 6px rgba(0,0,0,.14);
+}
+.swatch[aria-pressed="true"] { box-shadow:0 0 0 2px var(--panel), 0 0 0 4px var(--accent); }
+
+/* ------------------------------------------------------------------ main -- */
+.main { display:grid; grid-template-rows:auto minmax(0,1fr) auto; min-width:0; min-height:0; }
+/* Grid items default to min-width:auto, so a wide row of readouts or tiles
+   would push the whole page wider instead of scrolling inside itself. */
+.readouts, .vp, .plate { min-width:0; }
+.tiles { min-width:0; }
+
+.readouts {
+  display:flex; gap:0; flex-wrap:wrap; align-items:stretch;
+  background:var(--panel); border-bottom:1px solid var(--line);
+}
+.ro { padding:11px 18px; border-right:1px solid var(--line-2); min-width:0; }
+.ro:last-child { border-right:0; }
+.ro dt {
+  font-family:var(--mono); font-size:9.5px; letter-spacing:.13em; text-transform:uppercase;
+  color:var(--ink-3); margin:0 0 3px;
+}
+.ro dd {
+  margin:0; font-family:var(--mono); font-size:16px; font-variant-numeric:tabular-nums;
+  letter-spacing:-.02em; white-space:nowrap;
+}
+.ro dd .sub { font-size:11.5px; color:var(--ink-2); letter-spacing:0; margin-left:5px; }
+.ro.push { margin-left:auto; border-right:0; }
+
+.tag {
+  display:inline-block; font-family:var(--mono); font-size:10px; letter-spacing:.06em;
+  text-transform:uppercase; padding:2px 7px; border-radius:3px; vertical-align:2px;
+}
+.tag.ok { background:color-mix(in srgb,var(--ok) 16%,transparent); color:var(--ok); }
+.tag.warn { background:color-mix(in srgb,var(--warn) 18%,transparent); color:var(--warn); }
+.tag.crit { background:color-mix(in srgb,var(--crit) 16%,transparent); color:var(--crit); }
+
+/* -------------------------------------------------------------- viewport -- */
+.vp { position:relative; background:linear-gradient(var(--vp-1),var(--vp-2)); min-height:0; }
+.vp canvas { display:block; width:100%; height:100%; touch-action:none; }
+.vp-tl, .vp-br {
+  position:absolute; font-family:var(--mono); font-size:11px; color:var(--ink-3);
+  pointer-events:none; font-variant-numeric:tabular-nums;
+}
+.vp-tl { top:12px; left:14px; }
+.vp-br { bottom:12px; right:14px; text-align:right; }
+.vp-modes { position:absolute; top:10px; right:12px; display:flex; gap:5px; }
+
+/* ----------------------------------------------------------------- tiles -- */
+.plate { background:var(--panel); border-top:1px solid var(--line); padding:12px 18px 14px; }
+.plate-hd {
+  display:flex; align-items:baseline; justify-content:space-between; gap:14px; margin-bottom:9px;
+}
+.plate-hd h2 {
+  margin:0; font-family:var(--mono); font-size:10.5px; letter-spacing:.13em;
+  text-transform:uppercase; color:var(--ink-3); font-weight:600;
+}
+.plate-hd .note { font-size:12px; color:var(--ink-3); }
+.tiles { display:flex; gap:8px; overflow-x:auto; padding-bottom:4px; }
+.tile {
+  flex:0 0 auto; text-align:left; cursor:pointer; font:inherit;
+  background:var(--panel-2); border:1px solid var(--line); border-radius:6px;
+  padding:8px 11px; display:grid; gap:2px; transition:border-color .12s, background .12s;
+}
+.tile:hover { border-color:var(--ink-3); }
+.tile[aria-pressed="true"] { border-color:var(--accent); background:color-mix(in srgb,var(--accent) 8%,var(--panel-2)); }
+.tile .n { font-family:var(--mono); font-size:12px; font-weight:600; }
+.tile .d {
+  font-family:var(--mono); font-size:10.5px; color:var(--ink-2);
+  font-variant-numeric:tabular-nums; white-space:nowrap;
+}
+
+/* --------------------------------------------------------------- buttons -- */
+.actions { display:grid; gap:8px; margin-top:20px; }
+.btn {
+  font:inherit; font-size:13px; padding:9px 14px; border-radius:6px; cursor:pointer;
+  border:1px solid var(--line); background:var(--panel-2); color:var(--ink);
+  display:flex; align-items:center; justify-content:center; gap:8px;
+  transition:background .12s, border-color .12s;
+}
+.btn:hover { background:var(--sunk); }
+.btn.primary { background:var(--accent); border-color:var(--accent); color:var(--on-accent); font-weight:500; }
+.btn.primary:hover { background:var(--accent-2); border-color:var(--accent-2); }
+.btn .k { font-family:var(--mono); font-size:11px; opacity:.72; }
+
+.foot { font-size:11.5px; color:var(--ink-3); margin:16px 0 0; }
+.foot code {
+  font-family:var(--mono); font-size:11px; background:var(--sunk);
+  padding:1px 4px; border-radius:3px;
+}
+
+/* ---------------------------------------------------------------- mobile -- */
+@media (max-width:860px) {
+  .app { grid-template-columns:1fr; height:auto; }
+  .main { order:-1; height:auto; }
+  .vp { height:52vh; min-height:300px; }
+  .rail { border-right:0; border-top:1px solid var(--line); }
+  .rail-scroll { overflow:visible; }
+  .readouts { overflow-x:auto; flex-wrap:nowrap; }
+  .ro { flex:0 0 auto; }
+  .ro.push { margin-left:0; }
+  /* the mode chips would sit on top of the dimension label up here */
+  .vp-modes { top:auto; bottom:10px; left:12px; right:auto; flex-wrap:wrap; }
+  .vp-br { display:none; }
+}
+@media (prefers-reduced-motion:reduce) { * { transition:none !important; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="rail">
+    <div class="brand">
+      <h1><span class="mark">&#9698;</span> Coasting hill</h1>
+      <p>A roller hill for a toddler on a balance bike, sliced into tiles that fit your printer.</p>
+    </div>
+    <div class="rail-scroll" id="controls"></div>
+  </aside>
+
+  <main class="main">
+    <dl class="readouts">
+      <div class="ro"><dt>Tiles</dt><dd id="ro-tiles">&mdash;</dd></div>
+      <div class="ro"><dt>Largest tile</dt><dd id="ro-largest">&mdash;</dd></div>
+      <div class="ro"><dt>Max slope</dt><dd id="ro-slope">&mdash;</dd></div>
+      <div class="ro"><dt>Filament</dt><dd id="ro-filament">&mdash;</dd></div>
+      <div class="ro"><dt>Print time</dt><dd id="ro-time">&mdash;</dd></div>
+      <div class="ro"><dt>Spikes</dt><dd id="ro-spikes">&mdash;</dd></div>
+    </dl>
+
+    <div class="vp" id="vp">
+      <canvas id="vp-canvas"></canvas>
+      <div class="vp-tl" id="vp-dims"></div>
+      <div class="vp-modes">
+        <button class="chip" type="button" data-mode="assembled" aria-pressed="true">Assembled</button>
+        <button class="chip" type="button" data-mode="exploded" aria-pressed="false">Exploded</button>
+        <button class="chip" type="button" data-mode="underside" aria-pressed="false">Underside</button>
+      </div>
+      <div class="vp-br">drag to orbit &middot; scroll to zoom<br>floor grid 100 mm</div>
+    </div>
+
+    <section class="plate">
+      <div class="plate-hd">
+        <h2>Print plate</h2>
+        <span class="note" id="plate-note"></span>
+      </div>
+      <div class="tiles" id="tiles"></div>
+    </section>
+  </main>
+</div>
+
+<script>// ============================================================================
+//  geom.js -- the bikeramp.scad model, reimplemented as a mesh generator.
+//
+//  The tile solid is { (x,y,z) : (x,y) in footprint, 0 <= z <= h(x,y) }, so it
+//  needs no CSG: mesh the footprint on a grid whose lines are placed at every
+//  dovetail feature edge, clip the few straddling cells against a single
+//  half-plane each, and lift the result onto the height field. Adjacent cells
+//  cut against the same global line, so the surface stays watertight.
+//
+//  Runs in node (module.exports) and in the browser (window.BikeRamp).
+// ============================================================================
+(function (root) {
+  'use strict';
+
+  var DEFAULTS = {
+    hillLength: 600, hillWidth: 300, hillHeight: 45, humps: 1,
+    bevelRun: 90, edgeLip: 1.2,
+    bedX: 250, bedY: 250,      // usable bed, after edge margin
+    tabDepth: 12, tabNeck: 18, tabTip: 26, fit: 0.35, minTabH: 10,
+    spikeLen: 0,       // ground spike protrusion, mm. 0 = no spike mounts
+    cell: 8            // target mesh cell size, mm
+  };
+
+  // Screw-in ground spikes. The socket is a plain 12-sided blind hole; the
+  // spike's coarse thread forms its own groove in it, so it can be backed out.
+  var SPIKE = {
+    socketR: 7.3, socketDepth: 11, gon: 12,
+    roof: 5,           // material left between socket ceiling and riding surface
+    scan: 10,          // grid the tile is searched on for its thickest point
+    inset: 30,         // keep clear of tile edges and their dovetails
+    minor: 6.5, major: 7.45, pitch: 3.0, studH: 10, lead: 2.5,
+    chamfer: 1.5, flangeR: 9.0, flangeH: 1.5, coneR: 7.5, tipR: 0.6,
+    seg: 72
+  };
+
+  // -------------------------------------------------------------- profile ---
+  function profX(p, x) {
+    return p.edgeLip + (p.hillHeight - p.edgeLip) / 2 *
+           (1 - Math.cos(2 * Math.PI * p.humps * x / p.hillLength));
+  }
+  function profY(p, y) {
+    if (p.bevelRun <= 0) return p.hillHeight;
+    var t = Math.min(1, Math.max(0, Math.min(y, p.hillWidth - y) / p.bevelRun));
+    return p.edgeLip + (p.hillHeight - p.edgeLip) * t;
+  }
+  function hAt(p, x, y) { return Math.min(profX(p, x), profY(p, y)); }
+
+  function maxSlopeDeg(p) {
+    return Math.atan(Math.PI * p.humps * (p.hillHeight - p.edgeLip) / p.hillLength)
+           * 180 / Math.PI;
+  }
+
+  // --------------------------------------------------------------- tiling ---
+  // Tiles carry a dovetail past their nominal pitch, so the printable span is
+  // the bed less one tab. Beds are often oblong (a MK4 is 250x210), so try the
+  // tile grid both ways round and keep whichever needs fewer plates.
+  function tiling(p) {
+    var bx = Math.max(1, p.bedX - p.tabDepth), by = Math.max(1, p.bedY - p.tabDepth);
+    var fit = function (a, b) {
+      return [Math.max(1, Math.ceil(p.hillLength / a)), Math.max(1, Math.ceil(p.hillWidth / b))];
+    };
+    var a = fit(bx, by), b = fit(by, bx);
+    var turn = b[0] * b[1] < a[0] * a[1];
+    var n = turn ? b : a;
+    return { nx: n[0], ny: n[1], px: p.hillLength / n[0], py: p.hillWidth / n[1],
+             turned: turn };
+  }
+
+  function nTabs(span) { return Math.max(1, Math.round(span / 120)); }
+  function tabOffsets(span) {
+    var n = nTabs(span), out = [];
+    for (var k = 0; k < n; k++) out.push((k + 0.5) * span / n);
+    return out;
+  }
+  // Dovetails on a seam at constant x, positioned along y (and vice versa).
+  // Skipped where the hill is too thin to make a useful tab.
+  function xseamTabs(p, xs, y0, span) {
+    return tabOffsets(span).map(function (t) { return y0 + t; })
+      .filter(function (q) { return hAt(p, xs, q) >= p.minTabH; });
+  }
+  function yseamTabs(p, ys, x0, span) {
+    return tabOffsets(span).map(function (t) { return x0 + t; })
+      .filter(function (q) { return hAt(p, q, ys) >= p.minTabH; });
+  }
+
+  // ------------------------------------------------------------- dovetail ---
+  function lineIntersect(a, b) {
+    var d = a[2] * b[3] - a[3] * b[2];
+    var s = ((b[0] - a[0]) * b[3] - (b[1] - a[1]) * b[2]) / d;
+    return [a[0] + a[2] * s, a[1] + a[3] * s];
+  }
+  // Offset a CCW convex polygon outward by g (OpenSCAD's offset(delta=g)).
+  function offsetConvexCCW(pts, g) {
+    var n = pts.length, lines = [], i;
+    for (i = 0; i < n; i++) {
+      var a = pts[i], b = pts[(i + 1) % n];
+      var dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy);
+      lines.push([a[0] + (dy / L) * g, a[1] - (dx / L) * g, dx, dy]);
+    }
+    var out = [];
+    for (i = 0; i < n; i++) out.push(lineIntersect(lines[(i - 1 + n) % n], lines[i]));
+    return out;
+  }
+
+  // A dovetail rooted on a seam. axis 'x' points +X, axis 'y' points +Y.
+  // Vertices stay CCW; edges 0 and 2 are always the two slanted flanks.
+  function dovetail(p, axis, rootCoord, centre, grow) {
+    var n2 = p.tabNeck / 2, t2 = p.tabTip / 2, D = p.tabDepth;
+    var pts = [[0, -n2], [D, -t2], [D, t2], [0, n2]];
+    if (grow) pts = offsetConvexCCW(pts, grow);
+    if (axis === 'y') pts = pts.map(function (q) { return [-q[1], q[0]]; });
+    var ox = axis === 'x' ? rootCoord : centre;
+    var oy = axis === 'x' ? centre : rootCoord;
+    return pts.map(function (q) { return [q[0] + ox, q[1] + oy]; });
+  }
+
+  function feature(p, kind, axis, rootCoord, centre, grow) {
+    var poly = dovetail(p, axis, rootCoord, centre, grow);
+    var xs = poly.map(function (q) { return q[0]; });
+    var ys = poly.map(function (q) { return q[1]; });
+    // The two flanks mirror across this axis; a grid line on it guarantees each
+    // cell is cut by at most one of them.
+    var splitAxis = axis === 'x' ? 'y' : 'x';
+    var k = splitAxis === 'x' ? 0 : 1;
+    var e0 = [poly[0], poly[1]], e2 = [poly[2], poly[3]];
+    var m0 = (e0[0][k] + e0[1][k]) / 2, m2 = (e2[0][k] + e2[1][k]) / 2;
+    return {
+      kind: kind, poly: poly,
+      bbox: [Math.min.apply(null, xs), Math.min.apply(null, ys),
+             Math.max.apply(null, xs), Math.max.apply(null, ys)],
+      splitAxis: splitAxis, splitAt: centre,
+      low: m0 < m2 ? e0 : e2,      // flank on the low side of splitAt
+      high: m0 < m2 ? e2 : e0
+    };
+  }
+
+  // ------------------------------------------------------ tile footprint ----
+  function tileFeatures(p, t, i, j) {
+    var f = [], x0 = i * t.px, x1 = (i + 1) * t.px, y0 = j * t.py, y1 = (j + 1) * t.py;
+    if (i < t.nx - 1) xseamTabs(p, x1, y0, t.py).forEach(function (c) {
+      f.push(feature(p, 'tab', 'x', x1, c, 0)); });
+    if (j < t.ny - 1) yseamTabs(p, y1, x0, t.px).forEach(function (c) {
+      f.push(feature(p, 'tab', 'y', y1, c, 0)); });
+    if (i > 0) xseamTabs(p, x0, y0, t.py).forEach(function (c) {
+      f.push(feature(p, 'socket', 'x', x0, c, p.fit)); });
+    if (j > 0) yseamTabs(p, y0, x0, t.px).forEach(function (c) {
+      f.push(feature(p, 'socket', 'y', y0, c, p.fit)); });
+    return f;
+  }
+
+  // ----------------------------------------------------------- half-plane ---
+  // Keep the side of directed edge a->b that the CCW interior is on (left),
+  // or its complement when cutting a socket away.
+  function clipHalf(poly, a, b, keepLeft) {
+    if (!poly.length) return poly;
+    var s = keepLeft ? 1 : -1;
+    var side = function (q) {
+      return s * ((b[0] - a[0]) * (q[1] - a[1]) - (b[1] - a[1]) * (q[0] - a[0]));
+    };
+    var out = [], n = poly.length;
+    for (var i = 0; i < n; i++) {
+      var c = poly[i], d = poly[(i + 1) % n], sc = side(c), sd = side(d);
+      if (sc >= 0) out.push(c);
+      if ((sc > 0 && sd < 0) || (sc < 0 && sd > 0)) {
+        var u = sc / (sc - sd);
+        out.push([c[0] + (d[0] - c[0]) * u, c[1] + (d[1] - c[1]) * u]);
+      }
+    }
+    return out;
+  }
+
+  // -------------------------------------------------------- spike sockets ---
+  function regularGon(cx, cy, r, n) {
+    var pts = [];
+    for (var k = 0; k < n; k++) {
+      var a = 2 * Math.PI * k / n;
+      pts.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]);
+    }
+    return pts;                                   // CCW
+  }
+
+  function pointInConvex(q, poly) {
+    for (var i = 0; i < poly.length; i++) {
+      var a = poly[i], b = poly[(i + 1) % poly.length];
+      if ((b[0] - a[0]) * (q[1] - a[1]) - (b[1] - a[1]) * (q[0] - a[0]) < 0) return false;
+    }
+    return true;
+  }
+
+  // One socket per tile, at the thickest point of the area that clears the tile
+  // edges and their dovetails, scanned on a 10 mm grid. The toes are a
+  // millimetre or two thick and get none -- the dovetails tie them to the tiles
+  // that are pegged down.
+  function spikeSpots(p, t, i, j) {
+    if (!p.spikeLen) return [];
+    var x0 = i * t.px + SPIKE.inset, x1 = (i + 1) * t.px - SPIKE.inset;
+    var y0 = j * t.py + SPIKE.inset, y1 = (j + 1) * t.py - SPIKE.inset;
+    if (x1 < x0 || y1 < y0) return [];
+
+    var nx = Math.floor((x1 - x0) / SPIKE.scan), ny = Math.floor((y1 - y0) / SPIKE.scan);
+    var best = null;
+    for (var a = 0; a <= nx; a++) {
+      for (var b = 0; b <= ny; b++) {
+        var x = x0 + a * SPIKE.scan, y = y0 + b * SPIKE.scan, h = hAt(p, x, y);
+        if (!best || h > best[2] + 1e-9) best = [x, y, h];
+      }
+    }
+    return best && best[2] >= SPIKE.socketDepth + SPIKE.roof ? [[best[0], best[1]]] : [];
+  }
+
+  function pocketsFor(p, t, i, j) {
+    return spikeSpots(p, t, i, j).map(function (c) {
+      var poly = regularGon(c[0], c[1], SPIKE.socketR, SPIKE.gon);
+      var xs = poly.map(function (q) { return q[0]; });
+      var ys = poly.map(function (q) { return q[1]; });
+      var edges = poly.map(function (a, k) {
+        var b = poly[(k + 1) % poly.length];
+        return { a: a, b: b,
+                 box: [Math.min(a[0], b[0]), Math.min(a[1], b[1]),
+                       Math.max(a[0], b[0]), Math.max(a[1], b[1])] };
+      });
+      return {
+        poly: poly, edges: edges, depth: SPIKE.socketDepth,
+        bbox: [Math.min.apply(null, xs), Math.min.apply(null, ys),
+               Math.max.apply(null, xs), Math.max.apply(null, ys)]
+      };
+    });
+  }
+
+  // ---------------------------------------------------------- grid lines ----
+  function gridLines(lo, hi, critical, cell) {
+    var vals = critical.filter(function (v) { return v > lo + 1e-9 && v < hi - 1e-9; });
+    vals.push(lo, hi);
+    vals.sort(function (a, b) { return a - b; });
+    var uniq = [vals[0]];
+    for (var i = 1; i < vals.length; i++)
+      if (vals[i] - uniq[uniq.length - 1] > 1e-7) uniq.push(vals[i]);
+    var out = [uniq[0]];
+    for (i = 1; i < uniq.length; i++) {
+      var a = uniq[i - 1], b = uniq[i], n = Math.max(1, Math.ceil((b - a) / cell));
+      for (var k = 1; k <= n; k++) out.push(a + (b - a) * k / n);
+    }
+    return out;
+  }
+
+  // ---------------------------------------------------------------- mesh ----
+  function tileMesh(p, t, i, j) {
+    var feats = tileFeatures(p, t, i, j);
+    var rx0 = i * t.px, rx1 = (i + 1) * t.px, ry0 = j * t.py, ry1 = (j + 1) * t.py;
+
+    var bx0 = rx0, bx1 = rx1, by0 = ry0, by1 = ry1;
+    feats.forEach(function (f) {
+      if (f.kind !== 'tab') return;
+      bx0 = Math.min(bx0, f.bbox[0]); by0 = Math.min(by0, f.bbox[1]);
+      bx1 = Math.max(bx1, f.bbox[2]); by1 = Math.max(by1, f.bbox[3]);
+    });
+
+    var pockets = pocketsFor(p, t, i, j);
+    var cx = [rx0, rx1], cy = [ry0, ry1];
+    feats.forEach(function (f) {
+      f.poly.forEach(function (q) { cx.push(q[0]); cy.push(q[1]); });
+      (f.splitAxis === 'x' ? cx : cy).push(f.splitAt);
+    });
+    // A line on every socket vertex leaves each cell crossed by at most one of
+    // its edges, so the same single-half-plane split works here too.
+    pockets.forEach(function (pk) {
+      pk.poly.forEach(function (q) { cx.push(q[0]); cy.push(q[1]); });
+    });
+    var xs = gridLines(bx0, bx1, cx, p.cell);
+    var ys = gridLines(by0, by1, cy, p.cell);
+
+    var pieces = [];
+    for (var a = 0; a < xs.length - 1; a++) {
+      for (var b = 0; b < ys.length - 1; b++) {
+        var x0 = xs[a], x1 = xs[a + 1], y0 = ys[b], y1 = ys[b + 1];
+        var mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
+        var poly = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+        var inside = mx > rx0 && mx < rx1 && my > ry0 && my < ry1;
+
+        for (var k = 0; k < feats.length; k++) {
+          var f = feats[k];
+          if (mx < f.bbox[0] || mx > f.bbox[2] || my < f.bbox[1] || my > f.bbox[3]) continue;
+          var hi = (f.splitAxis === 'x' ? mx : my) > f.splitAt;
+          var e = hi ? f.high : f.low;
+          if (f.kind === 'tab') { inside = true; poly = clipHalf(poly, e[0], e[1], true); }
+        }
+        if (!inside) continue;
+        for (k = 0; k < feats.length; k++) {
+          var g = feats[k];
+          if (g.kind !== 'socket') continue;
+          if (mx < g.bbox[0] || mx > g.bbox[2] || my < g.bbox[1] || my > g.bbox[3]) continue;
+          var hi2 = (g.splitAxis === 'x' ? mx : my) > g.splitAt;
+          poly = clipHalf(poly, (hi2 ? g.high : g.low)[0], (hi2 ? g.high : g.low)[1], false);
+        }
+        if (poly.length < 3) continue;
+
+        var floor = 0, split = null;
+        for (k = 0; k < pockets.length; k++) {
+          var pk = pockets[k];
+          if (mx < pk.bbox[0] || mx > pk.bbox[2] || my < pk.bbox[1] || my > pk.bbox[3])
+            continue;
+          var cross = pk.edges.filter(function (e) {
+            return mx > e.box[0] && mx < e.box[2] && my > e.box[1] && my < e.box[3];
+          });
+          if (cross.length === 1) { split = { e: cross[0], d: pk.depth }; }
+          else if (pointInConvex([mx, my], pk.poly)) { floor = pk.depth; }
+          break;
+        }
+
+        if (split) {
+          var inn = clipHalf(poly, split.e.a, split.e.b, true);
+          var out = clipHalf(poly, split.e.a, split.e.b, false);
+          if (inn.length >= 3) pieces.push({ poly: inn, floor: split.d });
+          if (out.length >= 3) pieces.push({ poly: out, floor: 0 });
+        } else {
+          pieces.push({ poly: poly, floor: floor });
+        }
+      }
+    }
+    return buildSolid(p, pieces);
+  }
+
+  // Lift the plan polygons onto the height field, close the bottom, and wall in
+  // whichever plan edges did not cancel against a neighbour.
+  // Lift each plan piece onto the height field over its own floor, cap the
+  // underside, and wall in whatever a neighbour does not cover: the outside of
+  // the tile from floor to surface, and the step wherever two floors differ.
+  function buildSolid(p, pieces) {
+    var tris = [], edges = new Map(), Q = 1e4;
+    var key = function (x, y) { return Math.round(x * Q) + ':' + Math.round(y * Q); };
+
+    function tri(ax, ay, az, bx, by, bz, cx2, cy2, cz) {
+      tris.push(ax, ay, az, bx, by, bz, cx2, cy2, cz);
+    }
+    // Vertical quad along a->b. Interior lies left of a->b, so this faces out.
+    function wall(a, b, za0, zb0, za1, zb1) {
+      tri(a[0], a[1], za0, b[0], b[1], zb0, b[0], b[1], zb1);
+      tri(a[0], a[1], za0, b[0], b[1], zb1, a[0], a[1], za1);
+    }
+
+    pieces.forEach(function (pc) {
+      var poly = pc.poly, f = pc.floor, n = poly.length, i;
+      var h = poly.map(function (q) { return hAt(p, q[0], q[1]); });
+      for (i = 1; i < n - 1; i++) {
+        tri(poly[0][0], poly[0][1], h[0],
+            poly[i][0], poly[i][1], h[i],
+            poly[i + 1][0], poly[i + 1][1], h[i + 1]);                 // surface
+        tri(poly[0][0], poly[0][1], f,
+            poly[i + 1][0], poly[i + 1][1], f,
+            poly[i][0], poly[i][1], f);                                // underside
+      }
+      for (i = 0; i < n; i++) {
+        var a = poly[i], b = poly[(i + 1) % n];
+        var ka = key(a[0], a[1]), kb = key(b[0], b[1]);
+        if (ka === kb) continue;
+        var rev = kb + '|' + ka;
+        if (edges.has(rev)) {
+          var o = edges.get(rev);
+          edges.delete(rev);
+          if (Math.abs(o.f - f) > 1e-6) {          // socket wall
+            if (f < o.f) wall(a, b, f, f, o.f, o.f);
+            else wall(o.a, o.b, o.f, o.f, f, f);
+          }
+        } else edges.set(ka + '|' + kb, { a: a, b: b, f: f });
+      }
+    });
+
+    edges.forEach(function (e) {
+      var a = e.a, b = e.b;
+      wall(a, b, e.f, e.f, hAt(p, a[0], a[1]), hAt(p, b[0], b[1]));
+    });
+    return tris;
+  }
+
+  // ------------------------------------------------------------ measures ----
+  function measure(tris) {
+    var vol = 0, areaUp = 0, areaDown = 0, areaSide = 0;
+    var lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+    for (var i = 0; i < tris.length; i += 9) {
+      var ax = tris[i], ay = tris[i + 1], az = tris[i + 2];
+      var bx = tris[i + 3], by = tris[i + 4], bz = tris[i + 5];
+      var cx = tris[i + 6], cy = tris[i + 7], cz = tris[i + 8];
+      vol += (ax * (by * cz - cy * bz) - ay * (bx * cz - cx * bz)
+              + az * (bx * cy - cx * by)) / 6;
+      var ux = bx - ax, uy = by - ay, uz = bz - az;
+      var vx = cx - ax, vy = cy - ay, vz = cz - az;
+      var nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+      var m = Math.hypot(nx, ny, nz);
+      if (m > 0) {
+        if (nz > 0.7 * m) areaUp += m / 2;
+        else if (nz < -0.7 * m) areaDown += m / 2;
+        else areaSide += m / 2;
+      }
+      for (var k = 0; k < 3; k++) {
+        var v = [tris[i + k * 3], tris[i + k * 3 + 1], tris[i + k * 3 + 2]];
+        for (var d = 0; d < 3; d++) {
+          if (v[d] < lo[d]) lo[d] = v[d];
+          if (v[d] > hi[d]) hi[d] = v[d];
+        }
+      }
+    }
+    return {
+      volume: Math.abs(vol), areaUp: areaUp, areaDown: areaDown, areaSide: areaSide,
+      size: [hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]], min: lo
+    };
+  }
+
+  // Filament from the actual shell the slicer will lay down, not a flat fudge
+  // factor: top/bottom skins over their own areas, perimeters over the walls,
+  // infill through whatever volume is left.
+  var PRINT = { layer: 0.28, topLayers: 6, botLayers: 4, walls: 3, lineW: 0.42,
+                infill: 0.15, density: 1.24e-3, flow: 8 };
+
+  function estimate(m, print) {
+    var s = Object.assign({}, PRINT, print || {});
+    var skin = s.areaUpMul || 1;
+    var shell = m.areaUp * s.topLayers * s.layer * skin
+              + m.areaDown * s.botLayers * s.layer
+              + m.areaSide * s.walls * s.lineW;
+    shell = Math.min(shell, m.volume);
+    var used = shell + Math.max(0, m.volume - shell) * s.infill;
+    return { volume: used, grams: used * s.density, hours: used / s.flow / 3600 };
+  }
+
+  // ----------------------------------------------------------- spike part ---
+  // A lofted tube: rings of radii up the z axis, so the helical thread is just
+  // r(theta, z). Printed stud-down, tapering upward, so nothing overhangs.
+  function spikeMesh(params) {
+    var S = SPIKE, L = (params && params.spikeLen) || 6;
+    var zChamf = S.studH, zFlange = zChamf + S.chamfer;
+    var zTop = zFlange + S.flangeH, total = zTop + L;
+    var inr = S.flangeR * Math.cos(Math.PI / 6);          // hex inradius
+
+    function hexR(th) {
+      var a = ((th % (Math.PI / 3)) + Math.PI / 3) % (Math.PI / 3);
+      return inr / Math.cos(a - Math.PI / 6);
+    }
+    function threadR(th, z) {
+      var u = z / S.pitch - th / (2 * Math.PI);
+      u -= Math.floor(u);
+      var crest = 1 - Math.abs(2 * u - 1);
+      return S.minor + (S.major - S.minor) * Math.min(1, z / S.lead) * crest;
+    }
+    function rAt(th, z, band) {
+      if (band === 'thread') return threadR(th, z);
+      if (band === 'chamfer') {
+        var t = (z - zChamf) / S.chamfer;
+        return (1 - t) * threadR(th, zChamf) + t * hexR(th);
+      }
+      if (band === 'flange') return hexR(th);
+      var u = (z - zTop) / L;
+      return S.coneR + (S.tipR - S.coneR) * u;
+    }
+
+    var levels = [], z;
+    for (z = 0; z < zChamf - 1e-9; z += S.pitch / 12) levels.push([z, 'thread']);
+    levels.push([zChamf, 'thread']);
+    for (z = zChamf + S.chamfer / 3; z < zFlange - 1e-9; z += S.chamfer / 3)
+      levels.push([z, 'chamfer']);
+    levels.push([zFlange, 'flange']);
+    levels.push([zTop, 'flange']);
+    levels.push([zTop, 'cone']);                          // flat step under the spike
+    for (z = zTop + L / 8; z < total - 1e-9; z += L / 8) levels.push([z, 'cone']);
+    levels.push([total, 'cone']);
+
+    var N = S.seg, tris = [], i, k;
+    var ring = levels.map(function (lv) {
+      var pts = [];
+      for (var a = 0; a < N; a++) {
+        var th = 2 * Math.PI * a / N;
+        var r = rAt(th, lv[0], lv[1]);
+        pts.push([r * Math.cos(th), r * Math.sin(th), lv[0]]);
+      }
+      return pts;
+    });
+    function tri(a, b, c) { tris.push(a[0],a[1],a[2], b[0],b[1],b[2], c[0],c[1],c[2]); }
+
+    for (k = 0; k < ring.length - 1; k++)
+      for (i = 0; i < N; i++) {
+        var j = (i + 1) % N;
+        tri(ring[k][i], ring[k][j], ring[k + 1][j]);
+        tri(ring[k][i], ring[k + 1][j], ring[k + 1][i]);
+      }
+    var bot = [0, 0, 0], top = [0, 0, total], last = ring[ring.length - 1];
+    for (i = 0; i < N; i++) {
+      var j2 = (i + 1) % N;
+      tri(bot, ring[0][j2], ring[0][i]);                  // faces -z
+      tri(top, last[i], last[j2]);                        // faces +z
+    }
+    return tris;
+  }
+
+  // ------------------------------------------------------------- export ----
+  function stlBinary(tris, off) {
+    var n = tris.length / 9, buf = new ArrayBuffer(84 + n * 50), dv = new DataView(buf);
+    var enc = 'bikeramp';
+    for (var c = 0; c < enc.length; c++) dv.setUint8(c, enc.charCodeAt(c));
+    dv.setUint32(80, n, true);
+    var p = 84;
+    for (var i = 0; i < tris.length; i += 9) {
+      var ax=tris[i],ay=tris[i+1],az=tris[i+2],bx=tris[i+3],by=tris[i+4],bz=tris[i+5],
+          cx=tris[i+6],cy=tris[i+7],cz=tris[i+8];
+      var ux=bx-ax,uy=by-ay,uz=bz-az,vx=cx-ax,vy=cy-ay,vz=cz-az;
+      var nx=uy*vz-uz*vy, ny=uz*vx-ux*vz, nz=ux*vy-uy*vx;
+      var m=Math.hypot(nx,ny,nz)||1;
+      dv.setFloat32(p,nx/m,true); dv.setFloat32(p+4,ny/m,true); dv.setFloat32(p+8,nz/m,true);
+      p += 12;
+      for (var v = 0; v < 3; v++) {
+        dv.setFloat32(p, tris[i+v*3]-off[0], true);
+        dv.setFloat32(p+4, tris[i+v*3+1]-off[1], true);
+        dv.setFloat32(p+8, tris[i+v*3+2]-off[2], true);
+        p += 12;
+      }
+      dv.setUint16(p, 0, true); p += 2;
+    }
+    return new Uint8Array(buf);
+  }
+
+  var CRC = (function () {
+    var t = new Int32Array(256);
+    for (var i = 0; i < 256; i++) {
+      var c = i;
+      for (var k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+      t[i] = c;
+    }
+    return function (b) {
+      var c = -1;
+      for (var i = 0; i < b.length; i++) c = (c >>> 8) ^ t[(c ^ b[i]) & 255];
+      return (c ^ -1) >>> 0;
+    };
+  })();
+
+  // Store-only ZIP. STL is already dense; compression would buy little.
+  function zip(files) {
+    var parts = [], central = [], offset = 0, enc = new TextEncoder();
+    files.forEach(function (f) {
+      var name = enc.encode(f.name), crc = CRC(f.data), n = f.data.length;
+      var h = new Uint8Array(30 + name.length), d = new DataView(h.buffer);
+      d.setUint32(0, 0x04034b50, true); d.setUint16(4, 20, true);
+      d.setUint32(14, crc, true); d.setUint32(18, n, true); d.setUint32(22, n, true);
+      d.setUint16(26, name.length, true);
+      h.set(name, 30);
+      parts.push(h, f.data);
+
+      var cd = new Uint8Array(46 + name.length), c = new DataView(cd.buffer);
+      c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true);
+      c.setUint32(16, crc, true); c.setUint32(20, n, true); c.setUint32(24, n, true);
+      c.setUint16(28, name.length, true); c.setUint32(42, offset, true);
+      cd.set(name, 46);
+      central.push(cd);
+      offset += h.length + n;
+    });
+    var csize = central.reduce(function (s, c) { return s + c.length; }, 0);
+    var end = new Uint8Array(22), e = new DataView(end.buffer);
+    e.setUint32(0, 0x06054b50, true);
+    e.setUint16(8, files.length, true); e.setUint16(10, files.length, true);
+    e.setUint32(12, csize, true); e.setUint32(16, offset, true);
+    return new Blob(parts.concat(central, [end]), { type: 'application/zip' });
+  }
+
+
+  // ----------------------------------------------------------------- api ----
+  function build(params) {
+    var q = params || {};
+    var p = Object.assign({}, DEFAULTS, q);
+    if (q.maxPrint != null) {        // convenience alias for a square bed
+      if (q.bedX == null) p.bedX = q.maxPrint;
+      if (q.bedY == null) p.bedY = q.maxPrint;
+    }
+    var t = tiling(p);
+    var tiles = [], total = { volume: 0, areaUp: 0, areaDown: 0, areaSide: 0 };
+    for (var i = 0; i < t.nx; i++) {
+      for (var j = 0; j < t.ny; j++) {
+        var tris = tileMesh(p, t, i, j);
+        var m = measure(tris);
+        tiles.push({ i: i, j: j, name: 'tile_' + i + j, tris: tris, m: m,
+                     spots: spikeSpots(p, t, i, j),
+                     origin: [i * t.px, j * t.py] });
+        total.volume += m.volume; total.areaUp += m.areaUp;
+        total.areaDown += m.areaDown; total.areaSide += m.areaSide;
+      }
+    }
+    var biggest = tiles.reduce(function (a, b) {
+      return Math.max(b.m.size[0], b.m.size[1]) > Math.max(a.m.size[0], a.m.size[1]) ? b : a;
+    });
+    // A tile can be turned on the plate, so compare long-to-long, short-to-short.
+    var tw = Math.max(biggest.m.size[0], biggest.m.size[1]);
+    var th = Math.min(biggest.m.size[0], biggest.m.size[1]);
+    var bw = Math.max(p.bedX, p.bedY), bh = Math.min(p.bedX, p.bedY);
+    return {
+      params: p, tiling: t, tiles: tiles, total: total,
+      slope: maxSlopeDeg(p),
+      biggest: biggest,
+      spikes: tiles.reduce(function (n, q) { return n + q.spots.length; }, 0),
+      fits: tw <= bw + 1e-6 && th <= bh + 1e-6,
+      // fits, but only if you rotate it on the bed
+      turn: !(biggest.m.size[0] <= p.bedX + 1e-6 && biggest.m.size[1] <= p.bedY + 1e-6),
+      over: Math.max(tw - bw, th - bh),
+      estimate: estimate(total)
+    };
+  }
+
+  var api = { DEFAULTS: DEFAULTS, PRINT: PRINT, build: build, tiling: tiling,
+              hAt: hAt, profX: profX, profY: profY, maxSlopeDeg: maxSlopeDeg,
+              measure: measure, estimate: estimate, tileMesh: tileMesh,
+              stlBinary: stlBinary, zip: zip,
+              SPIKE: SPIKE, spikeSpots: spikeSpots, spikeMesh: spikeMesh,
+              xseamTabs: xseamTabs, yseamTabs: yseamTabs };
+
+  if (typeof module === 'object' && module.exports) module.exports = api;
+  else root.BikeRamp = api;
+})(this);
+</script>
+<script>window.SCAD_SOURCE = "// ============================================================================\n//  bikeramp.scad  --  printable coasting hill for a toddler balance bike\n//\n//  Generates a smooth cosine \"roller\" hill, auto-split into bed-sized tiles\n//  that lock together with drop-in dovetails.\n//\n//  Render one tile:   openscad -D 'part=\"tile\"' -D tile_i=0 -D tile_j=0 -o t.stl bikeramp.scad\n//  Preview the hill:  openscad -D 'part=\"hill\"' bikeramp.scad\n//  See ./render.sh for batch export.\n// ============================================================================\n\n/* [Hill] */\nhill_length = 600;   // total run, front toe to back toe (mm)\nhill_width  = 300;   // riding width (mm)\nhill_height = 45;    // crest height (mm)\nhumps       = 1;     // 1 = single hill, 2 = camel back, ...\nbevel_run   = 90;    // side taper: outer this-many mm slope down to the floor. 0 = vertical sides\nedge_lip    = 1.2;   // thickness at the very edges. Keeps the toe printable instead of a 0mm feather\n\n/* [Printer] */\nbed_x       = 250;   // usable bed along the run.   X1C is 256; 250 leaves margin\nbed_y       = 250;   // usable bed across the width. A MK4 would be 244 x 204\n\n/* [Joints] */\ntab_depth   = 12;\ntab_neck    = 18;    // width where the dovetail meets the tile (narrow)\ntab_tip     = 26;    // width at the tip (wide -> locks)\nfit         = 0.35;  // clearance cut into the matching socket, per side\nmin_tab_h   = 10;    // skip dovetails where the hill is shorter than this\n\n/* [Ground spikes] */\nspike_len     = 0;    // spike protrusion below the tile, mm. 0 = no sockets at all\nsocket_r      = 7.3;  // socket circumradius (12-sided blind hole)\nsocket_depth  = 11;\nsocket_roof   = 5;    // material left between socket ceiling and riding surface\nsocket_gon    = 12;\nspike_inset   = 30;   // keep sockets clear of tile edges and their dovetails\nspike_scan    = 10;   // grid the tile is searched on for its thickest point\nspike_minor   = 6.5;  // thread core radius\nspike_major   = 7.45; // thread crest radius -- bites into the plain socket wall\nspike_pitch   = 3.0;\nspike_stud    = 10;\nspike_chamfer = 1.5;\nspike_flange_r= 9.0;  // hex flange, circumradius. Grip it to screw the spike in\nspike_flange_h= 1.5;\nspike_cone_r  = 7.5;\nspike_tip_r   = 0.6;\n\n/* [Grip] */\ngrip_depth  = 0;     // 0 = smooth. 0.6 gives shallow traction grooves\ngrip_pitch  = 14;\ngrip_width  = 4;\n\n/* [Output] */\npart   = \"tile\";     // \"tile\" | \"hill\" | \"mono\" | \"spike\"\ntile_i = 0;          // tile index along the run\ntile_j = 0;          // tile index across the width\n\n/* [Hidden] */\n$fn = 32;\nSTEPS = 160;         // profile resolution\nBIG   = 1000;\n\n// ---------------------------------------------------------------- tiling ----\n// Tiles carry a dovetail past their nominal pitch, so the printable span is the\n// bed less one tab. Beds are often oblong, so lay the grid out both ways round\n// and keep whichever needs fewer plates.\nbx = max(1, bed_x - tab_depth);\nby = max(1, bed_y - tab_depth);\nnx_a = max(1, ceil(hill_length / bx));  ny_a = max(1, ceil(hill_width / by));\nnx_b = max(1, ceil(hill_length / by));  ny_b = max(1, ceil(hill_width / bx));\nturned = nx_b * ny_b < nx_a * ny_a;\n\nnx = turned ? nx_b : nx_a;\nny = turned ? ny_b : ny_a;\npx = hill_length / nx;   // tile pitch along the run\npy = hill_width  / ny;   // tile pitch across the width\n\n// ---------------------------------------------------------------- profile ---\n// Lengthwise: raised cosine, zero slope at both toes and at the crest.\nfunction prof_x(x) =\n    edge_lip + (hill_height - edge_lip) / 2 * (1 - cos(360 * humps * x / hill_length));\n\n// Crosswise: flat in the middle, tapering to the floor over bevel_run.\nfunction prof_y(y) =\n    bevel_run <= 0\n      ? hill_height\n      : edge_lip + (hill_height - edge_lip)\n          * min(1, max(0, min(y, hill_width - y) / bevel_run));\n\nfunction h_at(x, y) = min(prof_x(x), prof_y(y));\n\n// ------------------------------------------------------------ hill solid ----\nmodule hill_solid() {\n    intersection() {\n        // lengthwise profile, swept across the width\n        translate([0, hill_width + BIG, 0])\n            rotate([90, 0, 0])\n                linear_extrude(hill_width + 2 * BIG)\n                    polygon(concat(\n                        [[0, 0]],\n                        [for (i = [0 : STEPS])\n                            let (x = i * hill_length / STEPS) [x, prof_x(x)]],\n                        [[hill_length, 0]]\n                    ));\n\n        // crosswise profile, swept along the run\n        translate([-BIG, 0, 0])\n            rotate([0, 0, 90]) rotate([90, 0, 0])\n                linear_extrude(hill_length + 2 * BIG)\n                    polygon(concat(\n                        [[0, 0]],\n                        [for (i = [0 : STEPS])\n                            let (y = i * hill_width / STEPS) [y, prof_y(y)]],\n                        [[hill_width, 0]]\n                    ));\n    }\n}\n\n// --------------------------------------------------------------- dovetail ---\n// 2D dovetail pointing +X, root centred on the origin.\nmodule dovetail_2d(grow = 0) {\n    offset(delta = grow)\n        polygon([[0, -tab_neck / 2],\n                 [tab_depth,  -tab_tip / 2],\n                 [tab_depth,   tab_tip / 2],\n                 [0,  tab_neck / 2]]);\n}\n\n// How many dovetails fit on a seam of the given span, and where.\nfunction n_tabs(span) = max(1, round(span / 120));\nfunction tab_pos(span, k) = (k + 0.5) * span / n_tabs(span);\n\n// Seam at constant x = xs, running in y from y0 to y0+span.\n// Only keep tabs where there is enough material to make them worthwhile.\nfunction xseam_tabs(xs, y0, span) =\n    [for (k = [0 : n_tabs(span) - 1])\n        let (p = y0 + tab_pos(span, k))\n        if (h_at(xs, p) >= min_tab_h) p];\n\n// Seam at constant y = ys, running in x from x0 to x0+span.\nfunction yseam_tabs(ys, x0, span) =\n    [for (k = [0 : n_tabs(span) - 1])\n        let (p = x0 + tab_pos(span, k))\n        if (h_at(p, ys) >= min_tab_h) p];\n\n// ------------------------------------------------------- tile footprint -----\n// Plan-view outline of tile (i,j): the rectangle, plus dovetails on its +X and\n// +Y seams, minus sockets on its -X and -Y seams. Neighbours therefore always\n// agree, and every tile still drops straight down into place.\nmodule tile_footprint(i, j) {\n    x0 = i * px;  x1 = (i + 1) * px;\n    y0 = j * py;  y1 = (j + 1) * py;\n\n    difference() {\n        union() {\n            square([px, py]);\n\n            if (i < nx - 1)\n                for (p = xseam_tabs(x1, y0, py))\n                    translate([px, p - y0]) dovetail_2d();\n\n            if (j < ny - 1)\n                for (p = yseam_tabs(y1, x0, px))\n                    translate([p - x0, py]) rotate(90) dovetail_2d();\n        }\n\n        if (i > 0)\n            for (p = xseam_tabs(x0, y0, py))\n                translate([0, p - y0]) dovetail_2d(fit);\n\n        if (j > 0)\n            for (p = yseam_tabs(y0, x0, px))\n                translate([p - x0, 0]) rotate(90) dovetail_2d(fit);\n    }\n}\n\nmodule tile_prism(i, j, inset = 0) {\n    translate([i * px, j * py, -BIG / 2])\n        linear_extrude(BIG)\n            offset(delta = -inset)\n                tile_footprint(i, j);\n}\n\n// --------------------------------------------------------- spike sockets ----\n// One socket per tile, at the thickest point of the area that clears the tile\n// edges and their dovetails. Tiles too thin to swallow one simply get none.\nfunction spike_cands(i, j) =\n    let (x0 = i * px + spike_inset, x1 = (i + 1) * px - spike_inset,\n         y0 = j * py + spike_inset, y1 = (j + 1) * py - spike_inset)\n    (x1 < x0 || y1 < y0) ? []\n    : [for (a = [0 : floor((x1 - x0) / spike_scan)],\n            b = [0 : floor((y1 - y0) / spike_scan)])\n         let (x = x0 + a * spike_scan, y = y0 + b * spike_scan) [x, y, h_at(x, y)]];\n\nfunction spike_spot(i, j) =\n    let (c = spike_cands(i, j))\n    len(c) == 0 ? []\n    : let (best = max([for (q = c) q[2]]))\n      best < socket_depth + socket_roof ? []\n      : [ [for (q = c) if (q[2] >= best - 1e-9) [q[0], q[1]]][0] ];\n\nmodule spike_sockets(i, j) {\n    if (spike_len > 0)\n        for (q = spike_spot(i, j))\n            translate([q[0], q[1], -1])\n                cylinder(h = socket_depth + 1, r = socket_r, $fn = socket_gon);\n}\n\n// The spike itself. Printed stud-down, tapering upward, so nothing overhangs.\n// Its coarse thread forms its own groove in the plain socket and backs out again.\nfunction thread_profile(n = 72) =\n    [for (k = [0 : n - 1])\n        let (a = 360 * k / n, u = k / n, t = 1 - abs(2 * u - 1),\n             r = spike_minor + (spike_major - spike_minor) * t)\n        [r * cos(a), r * sin(a)]];\n\nmodule spike_part() {\n    zf = spike_stud + spike_chamfer;\n    zt = zf + spike_flange_h;\n    union() {\n        linear_extrude(height = spike_stud, twist = -360 * spike_stud / spike_pitch,\n                       slices = ceil(spike_stud * 8), convexity = 8)\n            polygon(thread_profile());\n        translate([0, 0, spike_stud])\n            cylinder(h = spike_chamfer, r1 = spike_major, r2 = spike_flange_r, $fn = 6);\n        translate([0, 0, zf]) cylinder(h = spike_flange_h, r = spike_flange_r, $fn = 6);\n        translate([0, 0, zt])\n            cylinder(h = max(0.1, spike_len), r1 = spike_cone_r, r2 = spike_tip_r, $fn = 48);\n    }\n}\n\n// ------------------------------------------------------------ grip combs ----\nmodule grip_cut() {\n    if (grip_depth > 0)\n        intersection() {\n            difference() {\n                hill_solid();\n                translate([0, 0, -grip_depth]) hill_solid();\n            }\n            for (x = [grip_pitch : grip_pitch : hill_length - grip_pitch])\n                translate([x - grip_width / 2, -BIG / 2, -BIG / 2])\n                    cube([grip_width, BIG, BIG]);\n        }\n}\n\n// ----------------------------------------------------------------- tiles ----\nmodule tile_solid(i, j) {\n    difference() {\n        intersection() { hill_solid(); tile_prism(i, j); }\n        grip_cut();\n        spike_sockets(i, j);\n    }\n}\n\nmodule tile(i, j) {\n    translate([-i * px, -j * py, 0])       // drop it on the origin for printing\n        tile_solid(i, j);\n}\n\n// ------------------------------------------------------------------ main ----\nif (part == \"hill\")\n    for (i = [0 : nx - 1], j = [0 : ny - 1])\n        translate([i * px, j * py, 0]) tile(i, j);\nelse if (part == \"spike\")\n    spike_part();\nelse if (part == \"mono\")          // uncut hill, for checking the joints\n    difference() { hill_solid(); grip_cut(); }\nelse\n    tile(tile_i, tile_j);\n\necho(str(\"tiles: \", nx, \" x \", ny, \" = \", nx * ny,\n         \"   pitch \", px, \" x \", py,\n         \"   printed extent up to \", px + tab_depth, \" x \", py + tab_depth,\n         \"   max slope \", atan(PI * humps * (hill_height - edge_lip) / hill_length), \" deg\"));\n";</script>
+<script>(function () {
+  'use strict';
+  var BR = window.BikeRamp;
+
+  // ------------------------------------------------------------------ state --
+  var state = Object.assign({}, BR.DEFAULTS, {
+    spikeLen: 6, infill: 0.15, colour: '#E2620A', mode: 'assembled', isolate: null
+  });
+  var result = null;
+
+  var PRESETS = {
+    'First hill':  { hillLength:600, hillWidth:300, hillHeight:45, humps:1, bevelRun:90 },
+    'Taller':      { hillLength:800, hillWidth:340, hillHeight:70, humps:1, bevelRun:100 },
+    'Camel back':  { hillLength:1000, hillWidth:300, hillHeight:50, humps:2, bevelRun:90 },
+    'Wide & low':  { hillLength:700, hillWidth:480, hillHeight:35, humps:1, bevelRun:130 }
+  };
+
+  // Nominal bed sizes; BED_MARGIN comes off each axis for clearance at the edge.
+  var BED_MARGIN = 6;
+  var PRINTERS = [
+    { name:'Bambu Lab X1C / X1E / P1S / P1P', x:256, y:256 },
+    { name:'Bambu Lab A1',                    x:256, y:256 },
+    { name:'Bambu Lab A1 mini',               x:180, y:180 },
+    { name:'Prusa MK4S / MK4 / MK3S+',        x:250, y:210 },
+    { name:'Prusa MINI+',                     x:180, y:180 },
+    { name:'Prusa XL',                        x:360, y:360 },
+    { name:'Creality Ender 3 / V2 / S1',      x:220, y:220 },
+    { name:'Creality K1 / K1C',               x:220, y:220 },
+    { name:'Creality K1 Max',                 x:300, y:300 },
+    { name:'Voron 2.4 / Trident (350)',       x:350, y:350 }
+  ];
+
+  var SPIKE_OPTS = [
+    { label:'None',    v:0 },
+    { label:'1/4 in',  v:6 },
+    { label:'1/2 in',  v:13 },
+    { label:'1 in',    v:25 }
+  ];
+
+  var FILAMENTS = ['#E2620A','#D8322F','#F0B429','#2F7D5E','#2B5FA8','#6B4E9B',
+                   '#E8E4DC','#2A2E30'];
+
+  var CONTROLS = [
+    { group:'Hill', items:[
+      { k:'hillLength', label:'Length',     min:250, max:2000, step:10, unit:'mm',
+        hint:'Toe to toe. Longer is gentler.' },
+      { k:'hillWidth',  label:'Width',      min:150, max:900,  step:10, unit:'mm' },
+      { k:'hillHeight', label:'Height',     min:15,  max:150,  step:1,  unit:'mm' },
+      { k:'humps',      label:'Humps',      min:1,   max:4,    step:1,  unit:'',
+        hint:'More than one? Add length to match, or it gets steep.' },
+      { k:'bevelRun',   label:'Side taper', min:0,   max:250,  step:5,  unit:'mm',
+        hint:'How far the sides slope down to the floor. 0 gives a cliff edge.' }
+    ]},
+    { group:'Printer', custom:'printer', items:[
+      { k:'fit', label:'Joint clearance', min:0.1, max:0.8, step:0.05, unit:'mm',
+        hint:'Cut into each socket, per side. Raise it if your prints run tight.' }
+    ]},
+    { group:'Filament estimate', items:[
+      { k:'infill', label:'Infill', min:0.05, max:0.4, step:0.01, unit:'%', pct:true }
+    ]}
+  ];
+
+  var $ = function (s, r) { return (r || document).querySelector(s); };
+  var el = function (t, cls, txt) {
+    var n = document.createElement(t);
+    if (cls) n.className = cls;
+    if (txt != null) n.textContent = txt;
+    return n;
+  };
+
+  // ------------------------------------------------------------- geometry ---
+  function rebuild() {
+    result = BR.build(state);
+    result.estimate = BR.estimate(result.total, { infill: state.infill });
+    renderReadouts();
+    renderTiles();
+    gl.upload(buildBuffers());
+    draw();
+  }
+
+  function tileOffset(t) {
+    if (state.mode !== 'exploded') return [0, 0, 0];
+    var g = 55, tl = result.tiling;
+    return [(t.i - (tl.nx - 1) / 2) * g, (t.j - (tl.ny - 1) / 2) * g, 0];
+  }
+
+  function visibleTiles() {
+    return state.isolate == null ? result.tiles
+      : result.tiles.filter(function (t) { return t.name === state.isolate; });
+  }
+
+  // Analytic surface normal, so the riding face shades smoothly while the cut
+  // faces and the underside stay crisp.
+  function topNormal(p, x, y, out) {
+    var e = 0.05;
+    var gx = (BR.hAt(p, x + e, y) - BR.hAt(p, x - e, y)) / (2 * e);
+    var gy = (BR.hAt(p, x, y + e) - BR.hAt(p, x, y - e)) / (2 * e);
+    var m = Math.hypot(gx, gy, 1);
+    out[0] = -gx / m; out[1] = -gy / m; out[2] = 1 / m;
+  }
+
+  function buildBuffers() {
+    var tiles = visibleTiles(), p = result.params;
+    var n = 0, i;
+    for (i = 0; i < tiles.length; i++) n += tiles[i].tris.length / 3;
+    var data = new Float32Array(n * 7), w = 0, nrm = [0, 0, 0];
+
+    tiles.forEach(function (t) {
+      var off = tileOffset(t);
+      var shade = 1 - ((t.i + t.j) % 2) * (state.mode === 'exploded' ? 0.07 : 0.025);
+      var tr = t.tris;
+      for (var k = 0; k < tr.length; k += 9) {
+        var ax=tr[k],ay=tr[k+1],az=tr[k+2],bx=tr[k+3],by=tr[k+4],bz=tr[k+5],
+            cx=tr[k+6],cy=tr[k+7],cz=tr[k+8];
+        var ux=bx-ax,uy=by-ay,uz=bz-az,vx=cx-ax,vy=cy-ay,vz=cz-az;
+        var fx=uy*vz-uz*vy, fy=uz*vx-ux*vz, fz=ux*vy-uy*vx;
+        var m = Math.hypot(fx,fy,fz) || 1;
+        var smooth = fz / m > 0.15;
+        for (var v = 0; v < 3; v++) {
+          var x=tr[k+v*3], y=tr[k+v*3+1], z=tr[k+v*3+2];
+          if (smooth) topNormal(p, x, y, nrm);
+          else { nrm[0]=fx/m; nrm[1]=fy/m; nrm[2]=fz/m; }
+          data[w++]=x+off[0]; data[w++]=y+off[1]; data[w++]=z+off[2];
+          data[w++]=nrm[0]; data[w++]=nrm[1]; data[w++]=nrm[2];
+          data[w++]=shade;
+        }
+      }
+    });
+
+    var bb = [Infinity,Infinity,Infinity,-Infinity,-Infinity,-Infinity];
+    for (i = 0; i < w; i += 7)
+      for (var d = 0; d < 3; d++) {
+        if (data[i+d] < bb[d]) bb[d] = data[i+d];
+        if (data[i+d] > bb[3+d]) bb[3+d] = data[i+d];
+      }
+    return { data: data, count: n, bbox: bb };
+  }
+
+  function gridLines() {
+    var p = state, pad = 150, s = 100;
+    var x0 = Math.floor(-pad / s) * s, x1 = Math.ceil((p.hillLength + pad) / s) * s;
+    var y0 = Math.floor(-pad / s) * s, y1 = Math.ceil((p.hillWidth + pad) / s) * s;
+    var v = [], x, y;
+    for (x = x0; x <= x1; x += s) v.push(x, y0, -0.5, x, y1, -0.5);
+    for (y = y0; y <= y1; y += s) v.push(x0, y, -0.5, x1, y, -0.5);
+    return new Float32Array(v);
+  }
+
+  // ---------------------------------------------------------------- webgl ---
+  var gl = (function () {
+    var canvas = null, g = null, prog = null, gprog = null;
+    var vbo = null, gvbo = null, count = 0, gcount = 0, bbox = null;
+    var cam = { yaw: -0.86, pitch: 0.42, zoom: 1 };
+
+    var VS = '#version 300 es\n' +
+      'in vec3 aPos; in vec3 aNrm; in float aShade;\n' +
+      'uniform mat4 uMVP;\n' +
+      'out vec3 vN; out float vS;\n' +
+      'void main(){ vN=aNrm; vS=aShade; gl_Position=uMVP*vec4(aPos,1.0); }';
+    var FS = '#version 300 es\nprecision highp float;\n' +
+      'in vec3 vN; in float vS;\n' +
+      'uniform vec3 uColor;\n' +
+      'out vec4 o;\n' +
+      'void main(){\n' +
+      '  vec3 n=normalize(vN);\n' +
+      '  float key=max(dot(n,normalize(vec3(-0.35,-0.75,0.78))),0.0);\n' +
+      '  float rim=max(dot(n,normalize(vec3(0.75,0.5,0.15))),0.0);\n' +
+      '  float sky=0.5+0.5*n.z;\n' +
+      '  float fill=max(-n.z,0.0);\n' +
+      '  vec3 c=uColor*(0.26+0.62*key+0.20*sky+0.20*fill)+vec3(0.10)*rim*0.5;\n' +
+      '  o=vec4(clamp(c*vS,0.0,1.0),1.0);\n' +
+      '}';
+    var GVS = '#version 300 es\nin vec3 aPos; uniform mat4 uMVP;\n' +
+      'void main(){ gl_Position=uMVP*vec4(aPos,1.0); }';
+    var GFS = '#version 300 es\nprecision mediump float; uniform vec4 uC; out vec4 o;\n' +
+      'void main(){ o=uC; }';
+
+    function shader(src, type) {
+      var s = g.createShader(type);
+      g.shaderSource(s, src); g.compileShader(s);
+      if (!g.getShaderParameter(s, g.COMPILE_STATUS)) throw new Error(g.getShaderInfoLog(s));
+      return s;
+    }
+    function program(vs, fs) {
+      var p = g.createProgram();
+      g.attachShader(p, shader(vs, g.VERTEX_SHADER));
+      g.attachShader(p, shader(fs, g.FRAGMENT_SHADER));
+      g.linkProgram(p);
+      if (!g.getProgramParameter(p, g.LINK_STATUS)) throw new Error(g.getProgramInfoLog(p));
+      return p;
+    }
+
+    function mul(a, b) {
+      var o = new Float32Array(16);
+      for (var i = 0; i < 4; i++) for (var j = 0; j < 4; j++) {
+        var s = 0;
+        for (var k = 0; k < 4; k++) s += a[k * 4 + j] * b[i * 4 + k];
+        o[i * 4 + j] = s;
+      }
+      return o;
+    }
+    function perspective(fov, asp, n, f) {
+      var t = 1 / Math.tan(fov / 2);
+      return new Float32Array([t/asp,0,0,0, 0,t,0,0, 0,0,(f+n)/(n-f),-1, 0,0,2*f*n/(n-f),0]);
+    }
+    function lookAt(e, c, u) {
+      var z = [e[0]-c[0], e[1]-c[1], e[2]-c[2]];
+      var zl = Math.hypot(z[0],z[1],z[2]); z = z.map(function (v) { return v/zl; });
+      var x = [u[1]*z[2]-u[2]*z[1], u[2]*z[0]-u[0]*z[2], u[0]*z[1]-u[1]*z[0]];
+      var xl = Math.hypot(x[0],x[1],x[2]) || 1; x = x.map(function (v) { return v/xl; });
+      var y = [z[1]*x[2]-z[2]*x[1], z[2]*x[0]-z[0]*x[2], z[0]*x[1]-z[1]*x[0]];
+      return new Float32Array([
+        x[0],y[0],z[0],0, x[1],y[1],z[1],0, x[2],y[2],z[2],0,
+        -(x[0]*e[0]+x[1]*e[1]+x[2]*e[2]),
+        -(y[0]*e[0]+y[1]*e[1]+y[2]*e[2]),
+        -(z[0]*e[0]+z[1]*e[1]+z[2]*e[2]), 1]);
+    }
+
+    function mvp() {
+      var c = [(bbox[0]+bbox[3])/2, (bbox[1]+bbox[4])/2, (bbox[2]+bbox[5])/2];
+      var r = Math.max(bbox[3]-bbox[0], bbox[4]-bbox[1], bbox[5]-bbox[2]) * 0.62 + 40;
+      var d = r * 2.9 * cam.zoom;
+      var cp = Math.cos(cam.pitch);
+      var e = [c[0]+d*cp*Math.cos(cam.yaw), c[1]+d*cp*Math.sin(cam.yaw), c[2]+d*Math.sin(cam.pitch)];
+      var asp = canvas.width / Math.max(1, canvas.height);
+      // Tight frustum: the joints are 0.35mm apart and need the depth precision.
+      var near = Math.max(r * 0.04, d - r * 2.2), far = d + r * 2.2;
+      return mul(perspective(0.72, asp, near, far), lookAt(e, c, [0,0,1]));
+    }
+
+    function css(v) {
+      var s = getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+      var m = /^#([0-9a-f]{6})$/i.exec(s);
+      if (!m) return [0.5,0.5,0.5];
+      var n = parseInt(m[1], 16);
+      return [(n>>16&255)/255, (n>>8&255)/255, (n&255)/255];
+    }
+
+    function resize() {
+      if (!canvas) return;
+      var dpr = Math.min(window.devicePixelRatio || 1, 2);
+      var w = Math.round(canvas.clientWidth * dpr), h = Math.round(canvas.clientHeight * dpr);
+      if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+    }
+
+    return {
+      init: function (cv) {
+        canvas = cv;
+        g = cv.getContext('webgl2', { antialias: true, alpha: false });
+        if (!g) return false;
+        prog = program(VS, FS); gprog = program(GVS, GFS);
+        vbo = g.createBuffer(); gvbo = g.createBuffer();
+        g.enable(g.DEPTH_TEST);
+        g.enable(g.CULL_FACE);
+        this.bindPointer();
+        return true;
+      },
+      upload: function (b) {
+        bbox = b.bbox; count = b.count;
+        g.bindBuffer(g.ARRAY_BUFFER, vbo);
+        g.bufferData(g.ARRAY_BUFFER, b.data, g.DYNAMIC_DRAW);
+        var gd = gridLines(); gcount = gd.length / 3;
+        g.bindBuffer(g.ARRAY_BUFFER, gvbo);
+        g.bufferData(g.ARRAY_BUFFER, gd, g.STATIC_DRAW);
+      },
+      draw: function () {
+        if (!g || !bbox) return;
+        resize();
+        var bg = css('--vp-2');
+        g.viewport(0, 0, canvas.width, canvas.height);
+        g.clearColor(bg[0], bg[1], bg[2], 1);
+        g.clear(g.COLOR_BUFFER_BIT | g.DEPTH_BUFFER_BIT);
+        var m = mvp();
+
+        g.useProgram(gprog);
+        g.uniformMatrix4fv(g.getUniformLocation(gprog, 'uMVP'), false, m);
+        var gc = css('--grid');
+        g.uniform4f(g.getUniformLocation(gprog, 'uC'), gc[0], gc[1], gc[2], 0.5);
+        g.bindBuffer(g.ARRAY_BUFFER, gvbo);
+        var gp = g.getAttribLocation(gprog, 'aPos');
+        g.enableVertexAttribArray(gp);
+        g.vertexAttribPointer(gp, 3, g.FLOAT, false, 12, 0);
+        if (cam.pitch > -0.05) g.drawArrays(g.LINES, 0, gcount);
+
+        g.useProgram(prog);
+        g.uniformMatrix4fv(g.getUniformLocation(prog, 'uMVP'), false, m);
+        var n = parseInt(state.colour.slice(1), 16);
+        g.uniform3f(g.getUniformLocation(prog, 'uColor'),
+                    (n>>16&255)/255, (n>>8&255)/255, (n&255)/255);
+        g.bindBuffer(g.ARRAY_BUFFER, vbo);
+        var ap = g.getAttribLocation(prog, 'aPos'),
+            an = g.getAttribLocation(prog, 'aNrm'),
+            as = g.getAttribLocation(prog, 'aShade');
+        [ap, an, as].forEach(function (a) { g.enableVertexAttribArray(a); });
+        g.vertexAttribPointer(ap, 3, g.FLOAT, false, 28, 0);
+        g.vertexAttribPointer(an, 3, g.FLOAT, false, 28, 12);
+        g.vertexAttribPointer(as, 1, g.FLOAT, false, 28, 24);
+        g.drawArrays(g.TRIANGLES, 0, count);
+      },
+      setPitch: function (v) { cam.pitch = v; },
+      bindPointer: function () {
+        var pts = new Map(), last = null, pinch = 0;
+        canvas.addEventListener('pointerdown', function (e) {
+          canvas.setPointerCapture(e.pointerId);
+          pts.set(e.pointerId, [e.clientX, e.clientY]);
+          last = [e.clientX, e.clientY];
+        });
+        canvas.addEventListener('pointermove', function (e) {
+          if (!pts.has(e.pointerId)) return;
+          pts.set(e.pointerId, [e.clientX, e.clientY]);
+          if (pts.size >= 2) {
+            var a = Array.from(pts.values());
+            var d = Math.hypot(a[0][0]-a[1][0], a[0][1]-a[1][1]);
+            if (pinch) cam.zoom = Math.min(3, Math.max(0.35, cam.zoom * pinch / d));
+            pinch = d;
+          } else if (last) {
+            cam.yaw -= (e.clientX - last[0]) * 0.008;
+            cam.pitch = Math.min(1.5, Math.max(-1.3, cam.pitch + (e.clientY - last[1]) * 0.006));
+            last = [e.clientX, e.clientY];
+          }
+          draw();
+        });
+        var end = function (e) { pts.delete(e.pointerId); last = null; pinch = 0; };
+        canvas.addEventListener('pointerup', end);
+        canvas.addEventListener('pointercancel', end);
+        canvas.addEventListener('wheel', function (e) {
+          e.preventDefault();
+          cam.zoom = Math.min(3, Math.max(0.35, cam.zoom * (1 + Math.sign(e.deltaY) * 0.1)));
+          draw();
+        }, { passive: false });
+      }
+    };
+  })();
+
+  var pending = false;
+  function draw() {
+    if (pending) return;
+    pending = true;
+    requestAnimationFrame(function () { pending = false; gl.draw(); });
+  }
+
+  // -------------------------------------------------------------- readouts --
+  function slopeWord(d) {
+    return d < 9 ? 'very gentle' : d < 15 ? 'gentle' : d < 21 ? 'moderate' : 'steep for a toddler';
+  }
+  function renderReadouts() {
+    var r = result, b = r.biggest.m.size, e = r.estimate;
+    var over = Math.max(b[0], b[1]) - r.params.maxPrint;
+    $('#ro-tiles').innerHTML = r.tiles.length +
+      '<span class="sub">' + r.tiling.nx + '\u00d7' + r.tiling.ny + ' grid</span>';
+    $('#ro-largest').innerHTML =
+      b.map(function (v) { return Math.round(v); }).join(' \u00d7 ') +
+      ' <span class="tag ' + (r.fits ? 'ok' : 'crit') + '">' +
+      (r.fits ? 'fits' : '+' + Math.ceil(over) + 'mm over') + '</span>';
+    $('#ro-slope').innerHTML = r.slope.toFixed(1) + '\u00b0' +
+      '<span class="sub">' + slopeWord(r.slope) + '</span>';
+    $('#ro-filament').innerHTML = (e.grams / 1000).toFixed(2) +
+      '<span class="sub">kg</span>';
+    $('#ro-time').innerHTML = '\u2248' + Math.round(e.hours) + '<span class="sub">h</span>';
+    $('#ro-spikes').innerHTML = state.spikeLen
+      ? r.spikes + '<span class="sub">\u00d7 ' + state.spikeLen + 'mm</span>'
+      : '<span class="sub" style="margin:0">none</span>';
+    $('#vp-dims').textContent = Math.round(state.hillLength) + ' \u00d7 ' +
+      Math.round(state.hillWidth) + ' \u00d7 ' + Math.round(state.hillHeight) + ' mm';
+  }
+
+  function renderTiles() {
+    var box = $('#tiles');
+    box.textContent = '';
+    result.tiles.forEach(function (t) {
+      var b = el('button', 'tile');
+      b.type = 'button';
+      b.setAttribute('aria-pressed', String(state.isolate === t.name));
+      b.appendChild(el('span', 'n', t.name.replace('tile_', '')));
+      b.appendChild(el('span', 'd', t.m.size.map(function (v) { return Math.round(v); })
+        .join('\u00d7') + '  ' +
+        Math.round(BR.estimate(t.m, { infill: state.infill }).grams) + 'g'));
+      b.addEventListener('click', function () {
+        state.isolate = state.isolate === t.name ? null : t.name;
+        renderTiles(); gl.upload(buildBuffers()); draw();
+      });
+      box.appendChild(b);
+    });
+    $('#plate-note').textContent = state.isolate
+      ? 'Showing ' + state.isolate + ' \u2014 click again for the whole hill'
+      : 'Click a tile to isolate it';
+  }
+
+  // -------------------------------------------------------------- controls --
+  var bedInputs = null;
+
+  function printerPicker() {
+    var wrap = document.createDocumentFragment();
+    var bx = el('input'), by = el('input');
+
+    var pick = el('div', 'ctrl');
+    var ptop = el('div', 'ctrl-top');
+    var plab = el('label', null, 'Printer');
+    plab.htmlFor = 'printer';
+    ptop.appendChild(plab);
+    var sel = el('select', 'select');
+    sel.id = 'printer';
+    PRINTERS.forEach(function (pr, i) {
+      var o = el('option', null, pr.name + '  \u2014  ' + pr.x + '\u00d7' + pr.y + ' mm');
+      o.value = String(i);
+      sel.appendChild(o);
+    });
+    var custom = el('option', null, 'Custom');
+    custom.value = 'custom';
+    sel.appendChild(custom);
+    sel.addEventListener('change', function () {
+      if (sel.value === 'custom') return;
+      var pr = PRINTERS[Number(sel.value)];
+      state.bedX = pr.x - BED_MARGIN;
+      state.bedY = pr.y - BED_MARGIN;
+      bx.value = state.bedX;
+      by.value = state.bedY;
+      rebuild();
+    });
+    pick.appendChild(ptop);
+    pick.appendChild(sel);
+    wrap.appendChild(pick);
+
+    var bed = el('div', 'ctrl');
+    var btop = el('div', 'ctrl-top');
+    var blab = el('label', null, 'Usable bed');
+    blab.htmlFor = 'bed-x';
+    var val = el('div', 'ctrl-val');
+    [[bx, 'bed-x', 'along the run'], [by, 'bed-y', 'across the width']]
+      .forEach(function (d, i) {
+        d[0].type = 'number'; d[0].id = d[1];
+        d[0].min = 80; d[0].max = 700; d[0].step = 1;
+        d[0].setAttribute('aria-label', 'Usable bed ' + d[2]);
+        d[0].addEventListener('change', function () {
+          var v = parseFloat(d[0].value);
+          if (isNaN(v)) { d[0].value = i ? state.bedY : state.bedX; return; }
+          v = Math.min(700, Math.max(80, v));
+          d[0].value = v;
+          state[i ? 'bedY' : 'bedX'] = v;
+          syncPrinter();
+          rebuild();
+        });
+        val.appendChild(d[0]);
+        if (!i) val.appendChild(el('span', 'x', '\u00d7'));
+      });
+    val.appendChild(el('span', 'u', 'mm'));
+    btop.appendChild(blab); btop.appendChild(val);
+    bed.appendChild(btop);
+    bed.appendChild(el('p', 'hint',
+      'Bed less ' + BED_MARGIN + ' mm of edge margin, along the run \u00d7 across the ' +
+      'width. Tiles get turned on the plate when that saves one.'));
+    wrap.appendChild(bed);
+
+    bedInputs = { sel: sel, x: bx, y: by };
+    return wrap;
+  }
+
+  function syncPrinter() {
+    if (!bedInputs) return;
+    var hit = -1;
+    PRINTERS.forEach(function (pr, i) {
+      if (hit < 0 && pr.x - BED_MARGIN === state.bedX && pr.y - BED_MARGIN === state.bedY)
+        hit = i;
+    });
+    bedInputs.sel.value = hit < 0 ? 'custom' : String(hit);
+    bedInputs.x.value = state.bedX;
+    bedInputs.y.value = state.bedY;
+  }
+
+  function spikeGroup() {
+    var host = document.createDocumentFragment();
+    var sg = el('div', 'group');
+    sg.appendChild(el('h2', null, 'Ground spikes'));
+    var schips = el('div', 'chips');
+    SPIKE_OPTS.forEach(function (o) {
+      var c = el('button', 'chip', o.label);
+      c.type = 'button';
+      c.setAttribute('aria-pressed', String(state.spikeLen === o.v));
+      c.addEventListener('click', function () {
+        state.spikeLen = o.v;
+        Array.prototype.forEach.call(schips.children, function (q) {
+          q.setAttribute('aria-pressed', String(q === c));
+        });
+        rebuild();
+      });
+      schips.appendChild(c);
+    });
+    sg.appendChild(schips);
+    sg.appendChild(el('p', 'hint',
+      'Adds one blind socket under each tile that is thick enough, plus a ' +
+      'screw-in spike to print. Grips grass; take them out for indoors. The ' +
+      'flange holds the hill 3 mm off the ground.'));
+    host.appendChild(sg);
+    return host;
+
+  }
+
+  function buildControls() {
+    var host = $('#controls');
+
+    var pg = el('div', 'group');
+    pg.appendChild(el('h2', null, 'Start from'));
+    var chips = el('div', 'chips');
+    Object.keys(PRESETS).forEach(function (name) {
+      var c = el('button', 'chip', name);
+      c.type = 'button';
+      c.addEventListener('click', function () {
+        Object.assign(state, PRESETS[name]);
+        syncInputs(); rebuild(); markPreset();
+      });
+      c.dataset.preset = name;
+      chips.appendChild(c);
+    });
+    pg.appendChild(chips);
+    host.appendChild(pg);
+
+    CONTROLS.forEach(function (grp) {
+      var g = el('div', 'group');
+      g.appendChild(el('h2', null, grp.group));
+      if (grp.custom === 'printer') g.appendChild(printerPicker());
+      grp.items.forEach(function (it) {
+        var c = el('div', 'ctrl');
+        var top = el('div', 'ctrl-top');
+        var lab = el('label', null, it.label);
+        lab.htmlFor = 'n-' + it.k;
+        var val = el('div', 'ctrl-val');
+        var num = el('input');
+        num.type = 'number'; num.id = 'n-' + it.k;
+        num.min = it.pct ? it.min * 100 : it.min;
+        num.max = it.pct ? it.max * 100 : it.max;
+        num.step = it.pct ? 1 : it.step;
+        val.appendChild(num);
+        val.appendChild(el('span', 'u', it.unit));
+        top.appendChild(lab); top.appendChild(val);
+
+        var rng = el('input');
+        rng.type = 'range'; rng.min = it.min; rng.max = it.max; rng.step = it.step;
+        rng.setAttribute('aria-label', it.label);
+
+        c.appendChild(top); c.appendChild(rng);
+        if (it.hint) c.appendChild(el('p', 'hint', it.hint));
+        g.appendChild(c);
+
+        var set = function (v, from) {
+          v = Math.min(it.max, Math.max(it.min, v));
+          state[it.k] = v;
+          if (from !== 'range') rng.value = v;
+          if (from !== 'num') num.value = it.pct ? Math.round(v * 100) : v;
+          rng.style.setProperty('--fill', ((v - it.min) / (it.max - it.min) * 100) + '%');
+          rebuild(); markPreset();
+        };
+        rng.addEventListener('input', function () { set(parseFloat(rng.value), 'range'); });
+        num.addEventListener('change', function () {
+          var v = parseFloat(num.value);
+          if (!isNaN(v)) set(it.pct ? v / 100 : v, 'num');
+        });
+        it._set = set;
+      });
+      host.appendChild(g);
+      if (grp.group === 'Hill') host.appendChild(spikeGroup());
+    });
+
+    var fg = el('div', 'group');
+    fg.appendChild(el('h2', null, 'Filament colour'));
+    var sw = el('div', 'swatches');
+    FILAMENTS.forEach(function (hex) {
+      var b = el('button', 'swatch');
+      b.type = 'button'; b.style.background = hex;
+      b.setAttribute('aria-label', 'Preview in ' + hex);
+      b.setAttribute('aria-pressed', String(state.colour === hex));
+      b.addEventListener('click', function () {
+        state.colour = hex;
+        Array.prototype.forEach.call(sw.children, function (o) {
+          o.setAttribute('aria-pressed', String(o === b));
+        });
+        draw();
+      });
+      sw.appendChild(b);
+    });
+    fg.appendChild(sw);
+    host.appendChild(fg);
+
+    var ag = el('div', 'actions');
+    var d1 = el('button', 'btn primary');
+    d1.type = 'button';
+    d1.innerHTML = 'Download all tiles <span class="k">.zip</span>';
+    d1.addEventListener('click', downloadZip);
+    var d2 = el('button', 'btn');
+    d2.type = 'button';
+    d2.innerHTML = 'Download OpenSCAD source <span class="k">.scad</span>';
+    d2.addEventListener('click', downloadScad);
+    ag.appendChild(d1); ag.appendChild(d2);
+    host.appendChild(ag);
+
+    var f = el('p', 'foot');
+    f.innerHTML = 'Slice with 3 walls, 6 top / 4 bottom layers, gyroid infill, ' +
+      'no supports, a 5&nbsp;mm brim. <strong>PLA indoors only</strong> \u2014 it sags ' +
+      'in a hot garage or a sunny car; use PETG or ASA outdoors.';
+    host.appendChild(f);
+
+    syncInputs();
+    syncPrinter();
+  }
+
+  function syncInputs() {
+    CONTROLS.forEach(function (g) {
+      g.items.forEach(function (it) { if (it._set) it._set(state[it.k]); });
+    });
+  }
+  function markPreset() {
+    document.querySelectorAll('[data-preset]').forEach(function (c) {
+      var p = PRESETS[c.dataset.preset];
+      var on = Object.keys(p).every(function (k) { return Math.abs(state[k] - p[k]) < 1e-9; });
+      c.setAttribute('aria-pressed', String(on));
+    });
+  }
+
+  // ---------------------------------------------------------------- export --
+  function save(blob, name) {
+    var a = document.createElement('a'), u = URL.createObjectURL(blob);
+    a.href = u; a.download = name; a.click();
+    setTimeout(function () { URL.revokeObjectURL(u); }, 4000);
+  }
+
+  function slug() {
+    return 'hill_' + Math.round(state.hillLength) + 'x' + Math.round(state.hillWidth) +
+           'x' + Math.round(state.hillHeight);
+  }
+
+  function readme() {
+    var r = result, e = r.estimate;
+    return [
+      'Balance-bike coasting hill', '',
+      'Hill        ' + Math.round(state.hillLength) + ' x ' + Math.round(state.hillWidth) +
+        ' x ' + Math.round(state.hillHeight) + ' mm, ' + state.humps + ' hump(s)',
+      'Max slope   ' + r.slope.toFixed(1) + ' deg (' + slopeWord(r.slope) + ')',
+      'Tiles       ' + r.tiles.length + '  (' + r.tiling.nx + ' along the run x ' +
+        r.tiling.ny + ' across)',
+      'Largest     ' + r.biggest.m.size.map(function (v) { return Math.round(v); }).join(' x ') +
+        ' mm  (bed set to ' + state.bedX + ' x ' + state.bedY + ' mm)' +
+        (r.turn ? '  -- turn it on the plate' : ''),
+      'Spikes      ' + (state.spikeLen
+        ? r.spikes + ' sockets, ' + state.spikeLen + ' mm spike'
+        : 'none'),
+      'Filament    ~' + (e.grams / 1000).toFixed(2) + ' kg at ' +
+        Math.round(state.infill * 100) + '% infill',
+      'Print time  ~' + Math.round(e.hours) + ' h  (rough \u2014 slice one tile to confirm)', '',
+      'Slicing',
+      '  0.28 mm layers, 3 walls, 6 top / 4 bottom layers, gyroid infill.',
+      '  No supports needed. Add a ~5 mm brim; the footprints are broad and flat.',
+      '  PLA indoors only. It softens around 55-60 C, so a hot garage or a sunny',
+      '  car will deform it. Use PETG or ASA if it lives outside.', '',
+      'Assembly',
+      '  tile_IJ: I = position along the run, J = across the width.',
+      '  Label each tile as it comes off the plate; they look alike and only one',
+      '  arrangement is right.',
+      '  Tiles drop straight down into place. The dovetails lock them horizontally,',
+      '  so nothing needs sliding and any tile can go in at any time.',
+      '  Sockets carry ' + state.fit.toFixed(2) + ' mm clearance per side. If a joint is',
+      '  tight, pare the socket walls rather than reprinting.', '',
+      'Before he rides it',
+      '  The dovetails hold tiles to each other but not to the ground. On a hard',
+      '  floor the whole hill will skate. Stick rubber pads underneath, run a bead',
+      '  of silicone caulk on the undersides, or set it on a rubber-backed rug.',
+      '  Check no tile rocks on an uneven floor.',
+      '  Helmet.', ''
+    ].concat(state.spikeLen ? [
+      'Ground spikes',
+      '  Print ' + result.spikes + ' of spike_x' + result.spikes + '.stl -- same settings,',
+      '  but 4 walls and 40% infill; they are small and take the load.',
+      '  Print them stud-down, exactly as oriented. No supports.',
+      '  Screw one into each socket. The thread cuts its own groove in the plain',
+      '  bore, so the first turn is stiff -- grip the hex flange with pliers if',
+      '  you need to. They back out again for indoor use.',
+      '  With spikes fitted the hill stands about 3 mm off the ground.', ''
+    ] : []).join('\n');
+  }
+
+  function downloadZip() {
+    var files = result.tiles.map(function (t) {
+      return { name: t.name + '.stl', data: BR.stlBinary(t.tris, t.m.min) };
+    });
+    var enc = new TextEncoder();
+    if (state.spikeLen && result.spikes)
+      files.push({ name: 'spike_x' + result.spikes + '.stl',
+                   data: BR.stlBinary(BR.spikeMesh(state), [0, 0, 0]) });
+    files.push({ name: 'README.txt', data: enc.encode(readme()) });
+    files.push({ name: 'bikeramp.scad', data: enc.encode(scadSource()) });
+    save(BR.zip(files), slug() + '.zip');
+  }
+
+  function scadSource() {
+    var map = {
+      hill_length: state.hillLength, hill_width: state.hillWidth,
+      hill_height: state.hillHeight, humps: state.humps, bevel_run: state.bevelRun,
+      edge_lip: state.edgeLip, bed_x: state.bedX, bed_y: state.bedY,
+      fit: state.fit, spike_len: state.spikeLen
+    };
+    var src = window.SCAD_SOURCE;
+    Object.keys(map).forEach(function (k) {
+      src = src.replace(new RegExp('^(' + k + '\\s*=\\s*)[^;]+;', 'm'), '$1' + map[k] + ';');
+    });
+    return src;
+  }
+  function downloadScad() {
+    save(new Blob([scadSource()], { type: 'text/plain' }), 'bikeramp.scad');
+  }
+
+  // ------------------------------------------------------------------ boot --
+  function boot() {
+    var cv = $('#vp-canvas');
+    if (!gl.init(cv)) {
+      $('#vp').innerHTML = '<p style="padding:24px;color:var(--ink-2)">' +
+        'This browser has no WebGL2, so the 3D preview is unavailable. ' +
+        'The controls and downloads still work.</p>';
+      return;
+    }
+    document.querySelectorAll('[data-mode]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var was = state.mode;
+        state.mode = b.dataset.mode;
+        document.querySelectorAll('[data-mode]').forEach(function (o) {
+          o.setAttribute('aria-pressed', String(o === b));
+        });
+        if (state.mode === 'underside') gl.setPitch(-0.85);
+        else if (was === 'underside') gl.setPitch(0.42);
+        gl.upload(buildBuffers()); draw();
+      });
+    });
+    buildControls();
+    rebuild();
+    markPreset();
+    window.addEventListener('resize', draw);
+    // The canvas also changes size when the rail wraps or the frame is resized,
+    // neither of which fires a window resize.
+    if (window.ResizeObserver) new ResizeObserver(draw).observe(cv);
+    if (window.matchMedia) {
+      var mq = window.matchMedia('(prefers-color-scheme: dark)');
+      if (mq.addEventListener) mq.addEventListener('change', draw);
+    }
+    new MutationObserver(draw).observe(document.documentElement,
+      { attributes: true, attributeFilter: ['data-theme'] });
+  }
+
+  if (document.readyState === 'loading')
+    document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,46 @@
+<title>Coasting hill generator</title>
+<style>{{CSS}}</style>
+
+<div class="app">
+  <aside class="rail">
+    <div class="brand">
+      <h1><span class="mark">&#9698;</span> Coasting hill</h1>
+      <p>A roller hill for a toddler on a balance bike, sliced into tiles that fit your printer.</p>
+    </div>
+    <div class="rail-scroll" id="controls"></div>
+  </aside>
+
+  <main class="main">
+    <dl class="readouts">
+      <div class="ro"><dt>Tiles</dt><dd id="ro-tiles">&mdash;</dd></div>
+      <div class="ro"><dt>Largest tile</dt><dd id="ro-largest">&mdash;</dd></div>
+      <div class="ro"><dt>Max slope</dt><dd id="ro-slope">&mdash;</dd></div>
+      <div class="ro"><dt>Filament</dt><dd id="ro-filament">&mdash;</dd></div>
+      <div class="ro"><dt>Print time</dt><dd id="ro-time">&mdash;</dd></div>
+      <div class="ro"><dt>Spikes</dt><dd id="ro-spikes">&mdash;</dd></div>
+    </dl>
+
+    <div class="vp" id="vp">
+      <canvas id="vp-canvas"></canvas>
+      <div class="vp-tl" id="vp-dims"></div>
+      <div class="vp-modes">
+        <button class="chip" type="button" data-mode="assembled" aria-pressed="true">Assembled</button>
+        <button class="chip" type="button" data-mode="exploded" aria-pressed="false">Exploded</button>
+        <button class="chip" type="button" data-mode="underside" aria-pressed="false">Underside</button>
+      </div>
+      <div class="vp-br">drag to orbit &middot; scroll to zoom<br>floor grid 100 mm</div>
+    </div>
+
+    <section class="plate">
+      <div class="plate-hd">
+        <h2>Print plate</h2>
+        <span class="note" id="plate-note"></span>
+      </div>
+      <div class="tiles" id="tiles"></div>
+    </section>
+  </main>
+</div>
+
+<script>{{GEOM}}</script>
+<script>window.SCAD_SOURCE = {{SCAD}};</script>
+<script>{{APP}}</script>
