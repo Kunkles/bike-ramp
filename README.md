@@ -1,7 +1,9 @@
 # Balance-bike coasting hill
 
+**→ [Open the generator](https://kunkles.github.io/bike-ramp/)**
+
 A smooth cosine "roller" hill for a toddler on a balance bike, split into
-tiles that fit a Bambu X1C and lock together with drop-in dovetails.
+tiles that fit your printer bed and lock together with drop-in dovetails.
 
 ![assembled](preview_hill.png)
 
@@ -31,8 +33,10 @@ than a drop.
 
 ## The generator
 
-`webapp/coasting-hill.html` is a self-contained page — open it in a browser, no
-server or install. Pick your printer from the dropdown, drag the sliders, and it
+Live at **[kunkles.github.io/bike-ramp](https://kunkles.github.io/bike-ramp/)**,
+or open `docs/index.html` straight from disk — it is one self-contained file
+with no dependencies, no server and no install. Pick your printer from the
+dropdown, drag the sliders, and it
 re-tiles live — showing tile count, largest tile against your bed, max slope,
 filament and print time — then hands you a zip of STLs plus a README and a
 matching `.scad`.
