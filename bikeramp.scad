@@ -155,12 +155,24 @@ module hill_solid() {
         // outside -- so union the plain hill with the raised hill clipped to
         // the blocks. The min() is what keeps a decal from ever standing above
         // the riding surface.
-        union() {
-            intersection() { sweep_x(); sweep_y(); }
-            intersection() {
-                sweep_x();
-                translate([0, 0, decal_relief]) sweep_y();
-                decal_prisms();
+        difference() {
+            union() {
+                intersection() { sweep_x(); sweep_y(); }
+                intersection() {                       // proud blocks
+                    sweep_x();
+                    translate([0, 0, decal_relief]) sweep_y();
+                    decal_prisms(1);
+                }
+            }
+            intersection() {                           // sunk blocks
+                decal_prisms(-1);
+                difference() {
+                    intersection() { sweep_x(); sweep_y(); }
+                    intersection() {
+                        sweep_x();
+                        translate([0, 0, decal_down()]) sweep_y();
+                    }
+                }
             }
         }
     }
@@ -219,15 +231,25 @@ function decal_glyph(ch) =
 
 // Blocks in (x, d), d being distance in from the nearer side, so one list
 // serves both flanks and each reads the right way round from its own side.
+// Never sink so far that the flank meets the ground.
+function decal_down() =
+    -min(decal_relief, max(0, prof_y(bevel_run * 0.08) - 0.6));
+
+// Every square is either proud or sunk -- raising only the odd ones leaves the
+// rest indistinguishable from the flank, so the band has no edge. Each square
+// is inset so a flat grout line runs between them: butted up, four would meet
+// at a point with alternating heights, which no surface can close.
 function decal_checker() =
     (decal != "checker" && decal != "both") ? []
     : let (sq = max(6, min(14, bevel_run * 0.11)),
-           d0 = bevel_run * 0.06,
+           d0 = bevel_run * 0.08,
            n  = floor(hill_length / sq),
-           pad = (hill_length - n * sq) / 2)
+           pad = (hill_length - n * sq) / 2,
+           g = 0.6)
       [for (i = [0 : max(0, n - 1)], r = [0 : 1])
-         if ((i + r) % 2 == 0)
-           [pad + i * sq, d0 + r * sq, pad + (i + 1) * sq, d0 + (r + 1) * sq]];
+         [pad + i * sq + g, d0 + r * sq + g,
+          pad + (i + 1) * sq - g, d0 + (r + 1) * sq - g,
+          (i + r) % 2 == 0 ? decal_relief : decal_down()]];
 
 // One word per line. A single long line has to cross the joints, where it gets
 // trimmed away; stacked words make a compact block that sits inside one tile.
@@ -276,16 +298,11 @@ function decal_letters() =
              if (decal_glyph(ws[li][k])[6 - r][c] == "#")
                let (x0 = mid - ((len(ws[li]) * 6 - 1) * pxu) / 2,
                     yl = base + (nl - 1 - li) * (7 + gap) * pxu)
-               [x0 + (k * 6 + c) * pxu, yl + r * pxu,
-                x0 + (k * 6 + c + 1) * pxu, yl + (r + 1) * pxu]];
-
-// Checker squares, and diagonal strokes in letters like X and Z, touch corner
-// to corner -- a non-manifold vertex. Growing in x alone is enough to turn that
-// into a shared edge, and avoids leaving a sliver between stacked pixels.
-function decal_grown() =
-    let (e = 0.15)
-    [for (r = concat(decal_checker(), decal_letters()))
-       [r[0] - e, r[1], r[2] + e, r[3]]];
+               // grow in x only: a diagonal neighbour then shares a real edge
+               // rather than a point, with no sliver between stacked rows
+               [x0 + (k * 6 + c) * pxu - 0.15, yl + r * pxu,
+                x0 + (k * 6 + c + 1) * pxu + 0.15, yl + (r + 1) * pxu,
+                decal_relief]];
 
 // Keep decals out of the joint zone -- the seam and the dovetail either side of
 // it. Relief on a tab or in a socket fouls the fit, and the tiles are separate
@@ -293,13 +310,13 @@ function decal_grown() =
 function trim_x(rects, c, pad) =
     [for (r = rects) each
        (r[2] <= c - pad || r[0] >= c + pad) ? [r]
-       : concat(r[0] < c - pad ? [[r[0], r[1], c - pad, r[3]]] : [],
-                r[2] > c + pad ? [[c + pad, r[1], r[2], r[3]]] : [])];
+       : concat(r[0] < c - pad ? [[r[0], r[1], c - pad, r[3], r[4]]] : [],
+                r[2] > c + pad ? [[c + pad, r[1], r[2], r[3], r[4]]] : [])];
 function trim_d(rects, c, pad) =
     [for (r = rects) each
        (r[3] <= c - pad || r[1] >= c + pad) ? [r]
-       : concat(r[1] < c - pad ? [[r[0], r[1], r[2], c - pad]] : [],
-                r[3] > c + pad ? [[r[0], c + pad, r[2], r[3]]] : [])];
+       : concat(r[1] < c - pad ? [[r[0], r[1], r[2], c - pad, r[4]]] : [],
+                r[3] > c + pad ? [[r[0], c + pad, r[2], r[3], r[4]]] : [])];
 function fold_x(rects, cuts, pad, i = 0) =
     i >= len(cuts) ? rects : fold_x(trim_x(rects, cuts[i], pad), cuts, pad, i + 1);
 function fold_d(rects, cuts, pad, i = 0) =
@@ -309,16 +326,19 @@ function decal_rects() =
     let (pad = tab_depth + 1.5,
          cx = [for (i = [1 : max(1, nx - 1)]) if (i < nx) i * px],
          cd = [for (i = [1 : max(1, ny - 1)]) if (i < ny) each [i * py, hill_width - i * py]],
-         a = fold_x(decal_grown(), cx, pad),
+         a = fold_x(concat(decal_checker(), decal_letters()), cx, pad),
          b = fold_d(a, cd, pad))
     [for (r = b) if (r[2] - r[0] > 0.4 && r[3] - r[1] > 0.4) r];
 
-module decal_prisms() {
+// The far flank is viewed from the opposite direction, where the run reads the
+// other way, so it is mirrored along the length -- otherwise the lettering comes
+// out backwards on that side.
+module decal_prisms(up) {
     union()
-        for (r = decal_rects()) {
+        for (r = decal_rects()) if ((r[4] > 0) == (up > 0)) {
             translate([r[0], r[1], -1])
                 cube([r[2] - r[0], r[3] - r[1], BIG]);
-            translate([r[0], hill_width - r[3], -1])
+            translate([hill_length - r[2], hill_width - r[3], -1])
                 cube([r[2] - r[0], r[3] - r[1], BIG]);
         }
 }

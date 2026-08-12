@@ -131,13 +131,25 @@
     var out = [], L = p.hillLength, B = p.bevelRun;
 
     if (p.decal === 'checker' || p.decal === 'both') {
+      // Every square is either proud or sunk. Raising only the odd ones leaves
+      // the even ones indistinguishable from the flank around them, so the band
+      // has no edge and reads as scattered blocks rather than a checkerboard.
       var sq = Math.max(6, Math.min(14, B * 0.11));
-      var d0 = B * 0.06, n = Math.floor(L / sq);
+      var d0 = B * 0.08, n = Math.floor(L / sq);
       var pad = (L - n * sq) / 2;
+      // never sink so far that the flank meets the ground
+      var floorAt = profY(p, d0) - 0.6;
+      var down = -Math.min(p.decalRelief, Math.max(0, floorAt));
+      // Inset every square so a flat grout line runs between them. Butted up,
+      // four squares meet at a point with alternating heights -- a singularity
+      // no surface can close. Apart, each one is an island with its own tidy
+      // loop of steps, and it reads more like tile anyway.
+      var g = 0.6;
       for (var i = 0; i < n; i++)
         for (var r = 0; r < 2; r++)
-          if ((i + r) % 2 === 0)
-            out.push([pad + i * sq, d0 + r * sq, pad + (i + 1) * sq, d0 + (r + 1) * sq]);
+          out.push([pad + i * sq + g, d0 + r * sq + g,
+                    pad + (i + 1) * sq - g, d0 + (r + 1) * sq - g,
+                    (i + r) % 2 === 0 ? p.decalRelief : down]);
     }
 
     if (p.decal === 'text' || p.decal === 'both') {
@@ -183,8 +195,11 @@
               var on = c < 5 && rows[6 - r].charAt(c) === '#';
               if (on && run < 0) run = c;
               if (!on && run >= 0) {
-                out.push([x0 + (k * 6 + run) * px, yl + r * px,
-                          x0 + (k * 6 + c) * px,   yl + (r + 1) * px]);
+                // grow in x only: a diagonal neighbour then shares a real edge
+                // instead of a point, without leaving a sliver between rows
+                out.push([x0 + (k * 6 + run) * px - 0.15, yl + r * px,
+                          x0 + (k * 6 + c) * px + 0.15,   yl + (r + 1) * px,
+                          p.decalRelief]);
                 run = -1;
               }
             }
@@ -215,15 +230,6 @@
 
   function finishRects(p, out) {
     var B = p.bevelRun;
-    // Checker squares, and diagonal strokes in letters like X and Z, touch
-    // corner to corner. That is a non-manifold vertex, so grow every block a
-    // hair: diagonal neighbours then overlap along a real edge instead.
-    // Growing in x alone is enough: a diagonal neighbour then shares a real
-    // edge segment rather than a point. Growing in d as well would leave a
-    // 2e-wide sliver between stacked pixels of the same stroke.
-    var e = 0.15;
-    out = out.map(function (r) { return [r[0] - e, r[1], r[2] + e, r[3]]; });
-
     // Keep decals out of the joint zone -- the seam itself and the dovetail
     // reach either side of it. Two reasons. Relief on a tab or in a socket
     // fouls the fit; and a block crossing the tile's plan boundary steps the
@@ -257,13 +263,19 @@
   }
 
   // Height added to the flank at (x,y). Zero everywhere else.
+  // Blocks are held in (x, d), d being distance in from the nearer side. The
+  // far flank is viewed from the opposite direction, where the run reads the
+  // other way, so its lookup is mirrored along the length -- otherwise the
+  // lettering comes out backwards on that side.
   function reliefAt(p, x, y) {
     var rects = p._decal;
     if (!rects || !rects.length) return 0;
-    var d = Math.min(y, p.hillWidth - y);
+    var far = y > p.hillWidth / 2;
+    var d = far ? p.hillWidth - y : y;
+    var u = far ? p.hillLength - x : x;
     for (var i = 0; i < rects.length; i++) {
       var r = rects[i];
-      if (x >= r[0] && x <= r[2] && d >= r[1] && d <= r[3]) return p.decalRelief;
+      if (u >= r[0] && u <= r[2] && d >= r[1] && d <= r[3]) return r[4];
     }
     return 0;
   }
@@ -619,14 +631,18 @@
     if (p.bevelRun > 0) { cy.push(p.bevelRun); cy.push(p.hillWidth - p.bevelRun); }
     // decal blocks are axis-aligned, so a line on each edge makes them crisp
     if (p._decal) p._decal.forEach(function (r) {
-      cx.push(r[0], r[2]);
+      cx.push(r[0], r[2], p.hillLength - r[0], p.hillLength - r[2]);
       cy.push(r[1], r[3], p.hillWidth - r[1], p.hillWidth - r[3]);
     });
     if (p.shape === 'drop')
       cx.push(p.hillLength - Math.min(p.deck, p.hillLength * 0.8));
     var xs = gridLines(bx0, bx1, cx, p.cell);
     var ys = gridLines(by0, by1, cy, p.cell);
-    var levels = (p._decal && p._decal.length) ? [0, p.decalRelief] : [0];
+    // Split at the fold for every relief in play -- flat, proud and sunk.
+    var levels = [0];
+    (p._decal || []).forEach(function (r) {
+      if (levels.indexOf(r[4]) < 0) levels.push(r[4]);
+    });
 
     var pieces = [];
     for (var a = 0; a < xs.length - 1; a++) {

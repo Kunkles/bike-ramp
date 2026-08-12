@@ -155,7 +155,11 @@ than the roller).
 
 ## Decals
 
-Raised graphics on the side flanks — a blocky stencil word and a checkered band.
+Relief graphics on the side flanks — a blocky stencil word and a checkered band.
+The checker alternates **proud and sunk** squares with a flat grout line between
+them; raising only the odd squares leaves the rest indistinguishable from the
+flank, so the band has no edge and reads as scattered blocks rather than checks.
+Both flanks are laid out to read the right way round from their own side.
 Type whatever you like in **Says**; A–Z, 0–9 and a few marks are supported and
 anything else is dropped.
 

@@ -345,6 +345,34 @@ console.log('\n7. decals sit on the flanks, never the riding surface\n');
   ok(worst <= p.decalRelief + 1e-9,
      `a decal rises ${worst.toFixed(2)}mm, more than the relief`);
 
+  // Sunk squares must not cut the flank through to the ground.
+  let lowest = Infinity;
+  for (const r of p._decal) {
+    if (r[4] >= 0) continue;
+    for (let x = r[0]; x <= r[2]; x += 2)
+      for (let d = r[1]; d <= r[3]; d += 1)
+        lowest = Math.min(lowest, BR.hAt(p, x, d));
+  }
+  console.log(`   deepest recess     ${lowest.toFixed(2)} mm above the ground`);
+  ok(lowest > 0.5, `a recess cuts the flank to ${lowest.toFixed(2)}mm`);
+
+  // Both flanks must read the right way round from their own side.
+  {
+    const mid = p.hillLength / 2, probe = [];
+    for (let x = mid - 40; x <= mid + 40; x += 2)
+      for (let d = p.bevelRun * 0.4; d < p.bevelRun * 0.75; d += 2)
+        probe.push(BR.reliefAt(p, x, d) > 0 ? 1 : 0);
+    let mirrored = 0, same = 0, k = 0;
+    for (let x = mid - 40; x <= mid + 40; x += 2)
+      for (let d = p.bevelRun * 0.4; d < p.bevelRun * 0.75; d += 2) {
+        const far = BR.reliefAt(p, p.hillLength - x, p.hillWidth - d) > 0 ? 1 : 0;
+        if (far === probe[k]) same++; else mirrored++;
+        k++;
+      }
+    console.log(`   far flank matches  ${same}/${same + mirrored} samples`);
+    ok(mirrored === 0, `the far flank does not read the same way round`);
+  }
+
   // and none of it may land on a dovetail, where it would foul the fit
   const t = BR.tiling(p);
   let onJoint = 0;
