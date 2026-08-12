@@ -178,6 +178,17 @@ Beds are often oblong — a MK4 is 250 × 210 — so the tile grid is laid out b
 ways round and whichever needs fewer plates wins. A tile that only fits turned
 is flagged in the app.
 
+The app's printer list covers Bambu (X1C/X1E/P1S/P1P, A1, A1 mini, H2S, H2D and
+H2D Pro), Prusa (MK4S/MK4/MK3S+, MINI+, XL), Creality (Ender 3, K1, K1 Max) and
+a Voron 350, and takes 6 mm off each axis for edge margin. Anything else, type
+the numbers in.
+
+For the **H2D and H2D Pro** the figures used are the *single-nozzle* printable
+area, 325 × 320. The headline 350 mm plate width only applies with both nozzles
+loaded with the same filament, which is not how you would run these tiles. The
+**H2S** is single-nozzle by design, so its 340 × 320 stands. Either one prints
+the default hill in **two tiles instead of six**.
+
 `render.sh` echoes the shape and its steepest gradient for whatever you set.
 Some starting points:
 

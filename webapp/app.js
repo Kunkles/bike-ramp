@@ -38,6 +38,11 @@
     { name:'Bambu Lab X1C / X1E / P1S / P1P', x:256, y:256 },
     { name:'Bambu Lab A1',                    x:256, y:256 },
     { name:'Bambu Lab A1 mini',               x:180, y:180 },
+    { name:'Bambu Lab H2S',                   x:340, y:320 },
+    { name:'Bambu Lab H2D / H2D Pro',         x:325, y:320,
+      note:'H2D figures are the single-nozzle printable area. The headline ' +
+           '350 mm width only applies with both nozzles loaded with the same ' +
+           'filament.' },
     { name:'Prusa MK4S / MK4 / MK3S+',        x:250, y:210 },
     { name:'Prusa MINI+',                     x:180, y:180 },
     { name:'Prusa XL',                        x:360, y:360 },
@@ -439,6 +444,7 @@
       state.bedY = pr.y - BED_MARGIN;
       bx.value = state.bedX;
       by.value = state.bedY;
+      syncPrinter();
       rebuild();
     });
     pick.appendChild(ptop);
@@ -470,12 +476,11 @@
     val.appendChild(el('span', 'u', 'mm'));
     btop.appendChild(blab); btop.appendChild(val);
     bed.appendChild(btop);
-    bed.appendChild(el('p', 'hint',
-      'Bed less ' + BED_MARGIN + ' mm of edge margin, along the run \u00d7 across the ' +
-      'width. Tiles get turned on the plate when that saves one.'));
+    var bedHint = el('p', 'hint');
+    bed.appendChild(bedHint);
     wrap.appendChild(bed);
 
-    bedInputs = { sel: sel, x: bx, y: by };
+    bedInputs = { sel: sel, x: bx, y: by, hint: bedHint };
     return wrap;
   }
 
@@ -489,6 +494,10 @@
     bedInputs.sel.value = hit < 0 ? 'custom' : String(hit);
     bedInputs.x.value = state.bedX;
     bedInputs.y.value = state.bedY;
+    bedInputs.hint.textContent =
+      'Bed less ' + BED_MARGIN + ' mm of edge margin, along the run \u00d7 across ' +
+      'the width. Tiles get turned on the plate when that saves one.' +
+      (hit >= 0 && PRINTERS[hit].note ? ' ' + PRINTERS[hit].note : '');
   }
 
   function shapePicker() {
