@@ -26,6 +26,7 @@ than a drop.
 | `render.sh` | exports all tiles to `stl/` |
 | `stl/tile_IJ.stl` | the default hill **without** spike sockets — also the test fixture. `I` = position along the run (0…2), `J` = across the width (0…1) |
 | `docs/index.html` | the same app as a standalone page, served by GitHub Pages |
+| `testplate/` | a one-plate test print with full-size joints — do this first |
 | `stlinfo.py` | bounding box + filament estimate for exported STLs |
 | `preview.py` | renders the STLs to a PNG |
 | `webapp/geom.js` | the model reimplemented as a mesh generator, shared by the app and the tests |
@@ -59,6 +60,15 @@ STLs for the default hill are already in `stl/`. To re-render with changes:
 ```bash
 ./render.sh -D hill_height=70 -D hill_length=800
 ```
+
+## Print the test plate first
+
+[`testplate/`](testplate/) is a 180 × 160 × 30 mm hill that splits into two
+tiles fitting a **single plate** — ~163 g, about 5 h. It is small but nothing on
+it is scaled: the dovetail and thread clearances are the production values, so
+it answers the two questions that actually matter before you commit a day of
+printing. Does a tile drop onto its neighbour, and does a spike wind into its
+socket? See [testplate/README.md](testplate/README.md).
 
 ## Printing
 
