@@ -33,23 +33,26 @@
   ];
 
   // Nominal bed sizes; BED_MARGIN comes off each axis for clearance at the edge.
+  // `flow` is a rough throughput class in mm^3/s -- it is what makes the time
+  // estimate differ between machines, and it is meant to be corrected from a
+  // real slice.
   var BED_MARGIN = 6;
   var PRINTERS = [
-    { name:'Bambu Lab X1C / X1E / P1S / P1P', x:256, y:256 },
-    { name:'Bambu Lab A1',                    x:256, y:256 },
-    { name:'Bambu Lab A1 mini',               x:180, y:180 },
-    { name:'Bambu Lab H2S',                   x:340, y:320 },
-    { name:'Bambu Lab H2D / H2D Pro',         x:325, y:320,
+    { name:'Bambu Lab X1C / X1E / P1S / P1P', x:256, y:256, flow:11 },
+    { name:'Bambu Lab A1',                    x:256, y:256, flow:9 },
+    { name:'Bambu Lab A1 mini',               x:180, y:180, flow:9 },
+    { name:'Bambu Lab H2S',                   x:340, y:320, flow:12 },
+    { name:'Bambu Lab H2D / H2D Pro',         x:325, y:320, flow:12,
       note:'H2D figures are the single-nozzle printable area. The headline ' +
            '350 mm width only applies with both nozzles loaded with the same ' +
            'filament.' },
-    { name:'Prusa MK4S / MK4 / MK3S+',        x:250, y:210 },
-    { name:'Prusa MINI+',                     x:180, y:180 },
-    { name:'Prusa XL',                        x:360, y:360 },
-    { name:'Creality Ender 3 / V2 / S1',      x:220, y:220 },
-    { name:'Creality K1 / K1C',               x:220, y:220 },
-    { name:'Creality K1 Max',                 x:300, y:300 },
-    { name:'Voron 2.4 / Trident (350)',       x:350, y:350 }
+    { name:'Prusa MK4S / MK4 / MK3S+',        x:250, y:210, flow:8 },
+    { name:'Prusa MINI+',                     x:180, y:180, flow:5 },
+    { name:'Prusa XL',                        x:360, y:360, flow:8 },
+    { name:'Creality Ender 3 / V2 / S1',      x:220, y:220, flow:4 },
+    { name:'Creality K1 / K1C',               x:220, y:220, flow:10 },
+    { name:'Creality K1 Max',                 x:300, y:300, flow:10 },
+    { name:'Voron 2.4 / Trident (350)',       x:350, y:350, flow:11 }
   ];
 
   var SPIKE_OPTS = [
@@ -81,8 +84,11 @@
       { k:'fit', label:'Joint clearance', min:0.1, max:0.8, step:0.05, unit:'mm',
         hint:'Cut into each socket, per side. Raise it if your prints run tight.' }
     ]},
-    { group:'Filament estimate', items:[
-      { k:'infill', label:'Infill', min:0.05, max:0.4, step:0.01, unit:'%', pct:true }
+    { group:'Estimate', items:[
+      { k:'infill', label:'Infill', min:0.05, max:0.4, step:0.01, unit:'%', pct:true },
+      { k:'flow', label:'Average flow', min:2, max:25, step:0.5, unit:'mm\u00b3/s',
+        hint:'Set from your printer, roughly. Slice one plate and nudge this ' +
+             'until the time matches \u2014 everything else then follows.' }
     ]}
   ];
 
@@ -97,7 +103,9 @@
   // ------------------------------------------------------------- geometry ---
   function rebuild() {
     result = BR.build(state);
-    result.estimate = BR.estimate(result.total, { infill: state.infill });
+    result.estimate = BR.estimate(result.total, {
+      infill: state.infill, flow: state.flow, plates: result.tiles.length
+    });
     applyVisibility();
     syncShape();
     renderReadouts();
@@ -444,6 +452,7 @@
       state.bedY = pr.y - BED_MARGIN;
       bx.value = state.bedX;
       by.value = state.bedY;
+      setControl('flow', pr.flow);
       syncPrinter();
       rebuild();
     });
@@ -672,6 +681,12 @@
     syncPrinter();
   }
 
+  function setControl(key, v) {
+    CONTROLS.forEach(function (g) {
+      g.items.forEach(function (it) { if (it.k === key && it._set) it._set(v); });
+    });
+  }
+
   function syncInputs() {
     CONTROLS.forEach(function (g) {
       g.items.forEach(function (it) { if (it._set) it._set(state[it.k]); });
@@ -731,7 +746,9 @@
         : 'none'),
       'Filament    ~' + (e.grams / 1000).toFixed(2) + ' kg at ' +
         Math.round(state.infill * 100) + '% infill',
-      'Print time  ~' + Math.round(e.hours) + ' h  (rough \u2014 slice one tile to confirm)', '',
+      'Print time  ~' + Math.round(e.hours) + ' h  at ' + state.flow +
+        ' mm3/s average, plus 6 min a plate',
+      '            (rough -- slice one plate to confirm)', '',
       'Slicing',
       '  0.28 mm layers, 3 walls, 6 top / 4 bottom layers, gyroid infill.',
       '  No supports needed. Add a ~5 mm brim; the footprints are broad and flat.',

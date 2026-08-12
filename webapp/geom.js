@@ -20,6 +20,7 @@
     bedX: 250, bedY: 250,      // usable bed, after edge margin
     tabDepth: 12, tabNeck: 18, tabTip: 26, fit: 0.35, minTabH: 10,
     spikeLen: 0,       // ground spike protrusion, mm. 0 = no spike mounts
+    flow: 8,           // average volumetric throughput, mm^3/s -- see estimate()
     cell: 8            // target mesh cell size, mm
   };
 
@@ -443,17 +444,24 @@
   // factor: top/bottom skins over their own areas, perimeters over the walls,
   // infill through whatever volume is left.
   var PRINT = { layer: 0.28, topLayers: 6, botLayers: 4, walls: 3, lineW: 0.42,
-                infill: 0.15, density: 1.24e-3, flow: 8 };
+                infill: 0.15, density: 1.24e-3, flow: 8, plateMins: 6, plates: 0 };
 
+  // Time is extruded volume over an average throughput, plus a fixed cost per
+  // plate for heat-up, levelling and purge. `flow` is the one number that
+  // carries the printer: it is a rough class figure, meant to be corrected from
+  // a real slice.
   function estimate(m, print) {
     var s = Object.assign({}, PRINT, print || {});
-    var skin = s.areaUpMul || 1;
-    var shell = m.areaUp * s.topLayers * s.layer * skin
+    var shell = m.areaUp * s.topLayers * s.layer
               + m.areaDown * s.botLayers * s.layer
               + m.areaSide * s.walls * s.lineW;
     shell = Math.min(shell, m.volume);
     var used = shell + Math.max(0, m.volume - shell) * s.infill;
-    return { volume: used, grams: used * s.density, hours: used / s.flow / 3600 };
+    return {
+      volume: used,
+      grams: used * s.density,
+      hours: used / Math.max(0.1, s.flow) / 3600 + s.plates * s.plateMins / 60
+    };
   }
 
   // ----------------------------------------------------------- spike part ---
@@ -632,7 +640,7 @@
       // fits, but only if you rotate it on the bed
       turn: !(biggest.m.size[0] <= p.bedX + 1e-6 && biggest.m.size[1] <= p.bedY + 1e-6),
       over: Math.max(tw - bw, th - bh),
-      estimate: estimate(total)
+      estimate: estimate(total, { flow: p.flow, plates: tiles.length })
     };
   }
 

@@ -86,9 +86,15 @@ between infill cells. Dropping to 10% infill saves ~150 g and is still fine for
 a toddler; go to 20% if he's on the bigger side or you want it to survive adults
 standing on it.
 
-Expect somewhere around 35 hours total. That comes from the extruded volume at
-roughly 8 mm³/s average flow, not from a slicer — treat it as ±40% and check it
-against your first plate.
+Print time is extruded volume divided by an average throughput, plus 6 minutes
+a plate for heat-up, levelling and purge. That throughput is the one number
+carrying your printer, and the app sets it from whichever you pick — roughly
+11 mm³/s for an X1C, 12 for an H2S, 8 for a MK4, 4 for a stock Ender 3. So the
+default hill lands near 26 h on an X1C, 22 h on an H2S and 71 h on an Ender 3.
+
+Those are class figures, not measurements. **Slice one plate, then nudge
+*Average flow* until the app's time matches** — every later estimate follows
+from it.
 
 ## Assembly
 
@@ -226,3 +232,5 @@ Geometry only — nothing here has been printed or ridden.
   socket).
 
 The shell/infill and print-time numbers above are analytical, not measured.
+Per-printer throughput figures are rough classes; the app exposes the number so
+you can correct it from a real slice.
