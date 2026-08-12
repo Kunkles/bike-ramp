@@ -141,30 +141,80 @@
     }
 
     if (p.decal === 'text' || p.decal === 'both') {
-      var txt = String(p.decalText || '').toUpperCase().split('')
-                  .filter(function (c) { return FONT[c]; });
-      if (!txt.length) return out;
-      var lo = p.decal === 'both' ? B * 0.36 : B * 0.28, hi = B * 0.80;
-      // fit the block to whichever runs out first, the flank or the length
-      var px = Math.min((hi - lo) / 7, (L * 0.86) / (txt.length * 6 - 1));
-      var w = (txt.length * 6 - 1) * px, x0 = (L - w) / 2;
-      var y0 = lo + ((hi - lo) - 7 * px) / 2;
-      txt.forEach(function (ch, k) {
-        var rows = FONT[ch];
-        for (var r = 0; r < 7; r++) {
-          var run = -1;
-          for (var c = 0; c <= 5; c++) {
-            var on = c < 5 && rows[6 - r].charAt(c) === '#';
-            if (on && run < 0) run = c;
-            if (!on && run >= 0) {                       // merge a row of pixels
-              out.push([x0 + (k * 6 + run) * px, y0 + r * px,
-                        x0 + (k * 6 + c) * px,   y0 + (r + 1) * px]);
-              run = -1;
+      // One word per line. A single long line has to cross the joints, where
+      // it gets trimmed away; stacked words make a compact block that sits
+      // inside one tile.
+      var words = String(p.decalText || '').toUpperCase().split(/\s+/)
+        .map(function (w) {
+          return w.split('').filter(function (c) { return FONT[c]; });
+        })
+        .filter(function (w) { return w.length; });
+      if (!words.length) return finishRects(p, out);
+
+      var span = textSpan(p);
+      var lo = p.decal === 'both' ? B * 0.36 : B * 0.26;
+
+      // Keep the block below the fold. Above it the riding surface takes over
+      // and min() clamps the relief flat, so lettering there simply vanishes.
+      var hMin = Infinity, q;
+      for (q = 0; q <= 8; q++)
+        hMin = Math.min(hMin, profX(p, span[0] + (span[1] - span[0]) * (0.1 + 0.1 * q)));
+      var dFold = B * Math.max(0, Math.min(1,
+        (hMin - p.edgeLip) / Math.max(1e-6, p.hillHeight - p.edgeLip)));
+      var hi = Math.min(B * 0.82, dFold - 2);
+      if (hi - lo < 6) return finishRects(p, out);      // no room to letter
+
+      var gap = 2, nl = words.length;
+      var rowsTot = nl * 7 + (nl - 1) * gap;
+      var widest = words.reduce(function (m, w) { return Math.max(m, w.length); }, 0);
+      var px = Math.min((hi - lo) / rowsTot,
+                        (span[1] - span[0]) * 0.9 / (widest * 6 - 1));
+      var base = lo + ((hi - lo) - rowsTot * px) / 2;
+      var mid = (span[0] + span[1]) / 2;
+
+      words.forEach(function (w, li) {
+        var x0 = mid - ((w.length * 6 - 1) * px) / 2;
+        var yl = base + (nl - 1 - li) * (7 + gap) * px;   // first word on top
+        w.forEach(function (ch, k) {
+          var rows = FONT[ch];
+          for (var r = 0; r < 7; r++) {
+            var run = -1;
+            for (var c = 0; c <= 5; c++) {
+              var on = c < 5 && rows[6 - r].charAt(c) === '#';
+              if (on && run < 0) run = c;
+              if (!on && run >= 0) {
+                out.push([x0 + (k * 6 + run) * px, yl + r * px,
+                          x0 + (k * 6 + c) * px,   yl + (r + 1) * px]);
+                run = -1;
+              }
             }
           }
-        }
+        });
       });
     }
+    return finishRects(p, out);
+  }
+
+  // The widest run of hill that no joint interrupts, preferring the tallest --
+  // lettering on a toe would be clamped flat by the riding surface.
+  function textSpan(p) {
+    var t = tiling(p), pad = p.tabDepth + 1.5, cuts = [0], i;
+    for (i = 1; i < t.nx; i++) cuts.push(i * t.px - pad, i * t.px + pad);
+    cuts.push(p.hillLength);
+    var best = null;
+    for (i = 0; i + 1 < cuts.length; i += 2) {
+      var a = cuts[i], b = cuts[i + 1];
+      if (b - a < 20) continue;
+      var score = profX(p, (a + b) / 2);
+      if (!best || score > best.score + 1e-9 ||
+          (Math.abs(score - best.score) < 1e-9 && b - a > best.b - best.a))
+        best = { a: a, b: b, score: score };
+    }
+    return best ? [best.a, best.b] : [0, p.hillLength];
+  }
+
+  function finishRects(p, out) {
+    var B = p.bevelRun;
     // Checker squares, and diagonal strokes in letters like X and Z, touch
     // corner to corner. That is a non-manifold vertex, so grow every block a
     // hair: diagonal neighbours then overlap along a real edge instead.

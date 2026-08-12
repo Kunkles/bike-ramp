@@ -157,7 +157,13 @@ than the roller).
 
 Raised graphics on the side flanks — a blocky stencil word and a checkered band.
 Type whatever you like in **Says**; A–Z, 0–9 and a few marks are supported and
-anything else is dropped. It scales to fit and centres itself.
+anything else is dropped.
+
+Each word gets its own line, so "LITTLE RIPPER" stacks as two. That is not just
+styling: one long line has to cross the tile joints, where it gets trimmed away
+and letters come out chopped. Stacked words make a block small enough to sit
+inside a single tile, and the generator places it on the tallest joint-free run
+of the ramp — high enough that the riding surface does not clamp it flat.
 
 **Nothing goes on the riding surface.** Relief under a 12" wheel is a bump and a
 trip edge, so decals live only on the flanks, which are already sloped and not

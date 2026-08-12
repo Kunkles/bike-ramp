@@ -229,24 +229,55 @@ function decal_checker() =
          if ((i + r) % 2 == 0)
            [pad + i * sq, d0 + r * sq, pad + (i + 1) * sq, d0 + (r + 1) * sq]];
 
-function decal_chars() =
-    [for (i = [0 : max(0, len(decal_text) - 1)])
-       if (!is_undef(decal_glyph(decal_text[i]))) decal_text[i]];
+// One word per line. A single long line has to cross the joints, where it gets
+// trimmed away; stacked words make a compact block that sits inside one tile.
+function decal_words() =
+    let (raw = [for (w = split_words(decal_text)) [for (c = [0 : max(0, len(w) - 1)])
+                  if (!is_undef(decal_glyph(w[c]))) w[c]]])
+    [for (w = raw) if (len(w) > 0) w];
+
+function split_words(t, i = 0, cur = "", acc = []) =
+    i >= len(t) ? (cur == "" ? acc : concat(acc, [cur]))
+    : t[i] == " " ? split_words(t, i + 1, "", cur == "" ? acc : concat(acc, [cur]))
+    : split_words(t, i + 1, str(cur, t[i]), acc);
+
+// The widest run of hill that no joint interrupts, preferring the tallest --
+// lettering on a toe would be clamped flat by the riding surface.
+function text_cuts() =
+    let (pad = tab_depth + 1.5)
+    concat([0], [for (i = [1 : max(1, nx - 1)]) if (i < nx) each [i * px - pad, i * px + pad]],
+           [hill_length]);
+
+function text_span() =
+    let (c = text_cuts(),
+         iv = [for (i = [0 : 2 : len(c) - 2]) if (c[i + 1] - c[i] >= 20) [c[i], c[i + 1]]],
+         best = max([for (v = iv) prof_x((v[0] + v[1]) / 2)]))
+    len(iv) == 0 ? [0, hill_length]
+    : [for (v = iv) if (prof_x((v[0] + v[1]) / 2) >= best - 1e-9) v][0];
 
 function decal_letters() =
     (decal != "text" && decal != "both") ? []
-    : let (ch = decal_chars(), n = len(ch))
-      n == 0 ? []
-      : let (lo = (decal == "both") ? bevel_run * 0.36 : bevel_run * 0.28,
-             hi = bevel_run * 0.80,
-             px = min((hi - lo) / 7, (hill_length * 0.86) / (n * 6 - 1)),
-             w  = (n * 6 - 1) * px,
-             x0 = (hill_length - w) / 2,
-             y0 = lo + ((hi - lo) - 7 * px) / 2)
-        [for (k = [0 : n - 1], r = [0 : 6], c = [0 : 4])
-           if (decal_glyph(ch[k])[6 - r][c] == "#")
-             [x0 + (k * 6 + c) * px, y0 + r * px,
-              x0 + (k * 6 + c + 1) * px, y0 + (r + 1) * px]];
+    : let (ws = decal_words(), nl = len(ws))
+      nl == 0 ? []
+      : let (sp = text_span(),
+             lo = (decal == "both") ? bevel_run * 0.36 : bevel_run * 0.26,
+             hmin = min([for (q = [0 : 8]) prof_x(sp[0] + (sp[1] - sp[0]) * (0.1 + 0.1 * q))]),
+             dfold = bevel_run * max(0, min(1, (hmin - edge_lip)
+                                            / max(1e-6, hill_height - edge_lip))),
+             hi = min(bevel_run * 0.82, dfold - 2))
+        (hi - lo < 6) ? []
+        : let (gap = 2,
+               rows_tot = nl * 7 + (nl - 1) * gap,
+               widest = max([for (w = ws) len(w)]),
+               pxu = min((hi - lo) / rows_tot, (sp[1] - sp[0]) * 0.9 / (widest * 6 - 1)),
+               base = lo + ((hi - lo) - rows_tot * pxu) / 2,
+               mid = (sp[0] + sp[1]) / 2)
+          [for (li = [0 : nl - 1], k = [0 : len(ws[li]) - 1], r = [0 : 6], c = [0 : 4])
+             if (decal_glyph(ws[li][k])[6 - r][c] == "#")
+               let (x0 = mid - ((len(ws[li]) * 6 - 1) * pxu) / 2,
+                    yl = base + (nl - 1 - li) * (7 + gap) * pxu)
+               [x0 + (k * 6 + c) * pxu, yl + r * pxu,
+                x0 + (k * 6 + c + 1) * pxu, yl + (r + 1) * pxu]];
 
 // Checker squares, and diagonal strokes in letters like X and Z, touch corner
 // to corner -- a non-manifold vertex. Growing in x alone is enough to turn that
@@ -269,7 +300,6 @@ function trim_d(rects, c, pad) =
        (r[3] <= c - pad || r[1] >= c + pad) ? [r]
        : concat(r[1] < c - pad ? [[r[0], r[1], r[2], c - pad]] : [],
                 r[3] > c + pad ? [[r[0], c + pad, r[2], r[3]]] : [])];
-
 function fold_x(rects, cuts, pad, i = 0) =
     i >= len(cuts) ? rects : fold_x(trim_x(rects, cuts[i], pad), cuts, pad, i + 1);
 function fold_d(rects, cuts, pad, i = 0) =
