@@ -176,11 +176,10 @@ console.log('\n4. ground spikes\n');
   })();
 
   console.log(`   sockets            ${withSpikes.spikes} (one per tile)`);
-  // Adding sockets also adds grid lines, which refines the curved surface
-  // nearby and adds a little volume back, so check the bore converges on its
-  // analytic value as the mesh is refined rather than pinning one cell size.
+  // The bore is lofted in 0.25 mm steps in z, so it sits a fraction proud of
+  // the continuous integral no matter how fine the plan grid gets. Check it
+  // lands close at every cell size rather than shrinking without limit.
   console.log('   cell   removed    threaded bore   error');
-  let lastErr = Infinity;
   for (const cell of [8, 3, 1.5]) {
     const a = BR.build({ cell }), b = BR.build({ cell, spikeLen: 6 });
     const removed = a.total.volume - b.total.volume, exp = b.spikes * bore;
@@ -189,10 +188,8 @@ console.log('\n4. ground spikes\n');
                 `${(removed / 1000).toFixed(3).padStart(7)}   ` +
                 `${(exp / 1000).toFixed(3).padStart(13)}   ` +
                 `${(err * 100).toFixed(2).padStart(5)}%`);
-    ok(err < lastErr, `socket bore error grew when the mesh was refined to ${cell}mm`);
-    lastErr = err;
+    ok(err < 0.005, `socket bore is ${(err * 100).toFixed(2)}% off at cell ${cell}mm`);
   }
-  ok(lastErr < 0.02, 'socket bore does not converge on its analytic volume');
 
   for (const t of withSpikes.tiles) {
     const leaks = watertight(t.tris);
@@ -216,10 +213,56 @@ console.log('\n4. ground spikes\n');
   }
 }
 
+console.log('\n5. the riding surface follows the height field\n');
+{
+  // h is min(profX, profY) and folds where the two cross. A flat facet cannot
+  // span that fold, so cells straddling it are split. Before that was done the
+  // fold came out visibly serrated -- over a millimetre out on a 45mm hill --
+  // which is what this guards.
+  const cases = [
+    ['default hill', {}],
+    ['default + spikes', { spikeLen: 6 }],
+    ['small + steep taper', { hillLength: 180, hillWidth: 160, hillHeight: 30,
+                              bevelRun: 60, spikeLen: 6 }],
+    ['kicker', { shape: 'kicker', hillLength: 350, hillHeight: 40 }],
+    ['drop', { shape: 'drop', hillLength: 500, hillHeight: 50, deck: 150 }],
+    ['tall and short', { hillHeight: 150, hillLength: 250, hillWidth: 200 }],
+    ['no side taper', { bevelRun: 0 }],
+    ['camel back', { humps: 2, hillLength: 1000, hillHeight: 50 }]
+  ];
+  for (const [label, cfg] of cases) {
+    const b = BR.build(cfg), p = b.params;
+    let worst = 0;
+    for (const t of b.tiles) {
+      const T = t.tris;
+      for (let i = 0; i < T.length; i += 9) {
+        const a = [T[i], T[i+1], T[i+2]], q = [T[i+3], T[i+4], T[i+5]],
+              c = [T[i+6], T[i+7], T[i+8]];
+        const u = [q[0]-a[0], q[1]-a[1], q[2]-a[2]], v = [c[0]-a[0], c[1]-a[1], c[2]-a[2]];
+        const n = [u[1]*v[2]-u[2]*v[1], u[2]*v[0]-u[0]*v[2], u[0]*v[1]-u[1]*v[0]];
+        const m = Math.hypot(n[0], n[1], n[2]) || 1;
+        if (n[2] / m < 0.5) continue;                          // riding surface only
+        const cx = (a[0]+q[0]+c[0])/3, cy = (a[1]+q[1]+c[1])/3;
+        if (t.spots.some((sp) => Math.hypot(cx-sp[0], cy-sp[1]) < BR.SPIKE.socketR + 1))
+          continue;                                            // socket, not surface
+        for (const w of [[1/3,1/3,1/3],[0.5,0.5,0],[0,0.5,0.5],[0.5,0,0.5]]) {
+          const x = a[0]*w[0]+q[0]*w[1]+c[0]*w[2];
+          const y = a[1]*w[0]+q[1]*w[1]+c[1]*w[2];
+          const z = a[2]*w[0]+q[2]*w[1]+c[2]*w[2];
+          worst = Math.max(worst, Math.abs(z - BR.hAt(p, x, y)));
+        }
+      }
+    }
+    console.log(`   ${label.padEnd(22)} cell ${p.cell.toFixed(1).padStart(4)} mm   ` +
+                `worst ${worst.toFixed(4)} mm`);
+    ok(worst < 0.08, `${label}: surface is ${worst.toFixed(3)}mm off the height field`);
+  }
+}
+
 if (!haveOpenSCAD()) {
-  console.log('\n5. OpenSCAD cross-check  -- SKIPPED (openscad not on PATH)\n');
+  console.log('\n6. OpenSCAD cross-check  -- SKIPPED (openscad not on PATH)\n');
 } else {
-  console.log('\n5. OpenSCAD agrees on the spiked model\n');
+  console.log('\n6. OpenSCAD agrees on the spiked model\n');
   const cases = [
     ['tile 1,0 with socket', ['-D', 'part="tile"', '-D', 'tile_i=1', '-D', 'tile_j=0',
                               '-D', 'spike_len=6'],

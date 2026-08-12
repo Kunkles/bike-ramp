@@ -231,6 +231,28 @@ openscad -o spike.stl -D 'part="spike"' -D spike_len=6 bikeramp.scad
 Keep it gentle. A hill he can't get up isn't fun, and 13° is already a steep
 driveway. Print the default, watch him ride it, then decide whether to go bigger.
 
+## Mesh accuracy
+
+The riding surface is `min(profX, profY)`, so it **folds** along the curve where
+the two are equal — the join between the riding face and the side taper. A flat
+facet cannot span a fold, and because the fold runs diagonally to the mesh grid
+it came out visibly serrated: over a millimetre out on the default hill, nearly
+two on a short steep one. Refining the grid barely helped, because a crease is
+not curvature.
+
+Cells straddling the fold are now split along it, the same way they are already
+split along dovetail edges, so each half sits on one smooth branch. The cut
+point on a shared edge is interpolated from that edge alone, so the neighbouring
+cell computes the same point and the surface stays closed. Worst-case error went
+from 1.32 mm to 0.017 mm on the default hill, for about the same triangle count
+— and agreement with OpenSCAD, which does exact CSG and never had the problem,
+tightened from ~0.05% to ~0.01%.
+
+Cell size also follows the profile now: a flat facet sags by roughly
+`h″·cell²/8`, so the mesh picks its own spacing from the sharpest curvature to
+hold 0.05 mm. Long gentle hills stay coarse and fast; short steep ones refine
+themselves.
+
 ## What's been checked
 
 Geometry only — nothing here has been printed or ridden.
@@ -239,7 +261,9 @@ Geometry only — nothing here has been printed or ridden.
 - The six tiles sum to 4.81 cm³ *less* than the uncut hill, which matches the
   calculated dovetail clearance volume (4.79 cm³) to within 0.5% — so the tabs
   and sockets are complementary, correctly placed, and nowhere overlapping.
-- The riding surface is continuous across every seam.
+- The riding surface is continuous across every seam, and follows the height
+  field to within 0.05 mm across eight shapes including the fold at the side
+  taper (`node webapp/test.js`, section 5).
 - The generator's mesher agrees with OpenSCAD to within 0.15% on every tile
   (0.06% with spike sockets, 0.05% on the drop and the jump, 0.21% on the spike
   itself), and its exported STLs stay manifold after rounding to float32

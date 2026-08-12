@@ -73,7 +73,7 @@
 
   var CONTROLS = [
     { group:'Hill', custom:'shape', items:[
-      { k:'hillLength', label:'Length',     min:250, max:2000, step:10, unit:'mm',
+      { k:'hillLength', label:'Length',     min:120, max:2000, step:10, unit:'mm',
         hint:'Toe to toe. Longer is gentler.' },
       { k:'deck',       label:'Deck',       min:30,  max:400,  step:10, unit:'mm',
         hint:'Flat run between the top of the rise and the edge.',
@@ -132,11 +132,15 @@
   }
 
   // Analytic surface normal, so the riding face shades smoothly while the cut
-  // faces and the underside stay crisp.
-  function topNormal(p, x, y, out) {
-    var e = 0.05;
-    var gx = (BR.hAt(p, x + e, y) - BR.hAt(p, x - e, y)) / (2 * e);
-    var gy = (BR.hAt(p, x, y + e) - BR.hAt(p, x, y - e)) / (2 * e);
+  // faces and the underside stay crisp. h is min(profX, profY): differencing it
+  // across the fold would average the two branches and round off an edge that
+  // is genuinely sharp, so pick the branch from the facet's own centre first.
+  function topNormal(p, x, y, cx, cy, out) {
+    var e = 0.05, gx = 0, gy = 0;
+    if (BR.profX(p, cx) <= BR.profY(p, cy))
+      gx = (BR.profX(p, x + e) - BR.profX(p, x - e)) / (2 * e);
+    else
+      gy = (BR.profY(p, y + e) - BR.profY(p, y - e)) / (2 * e);
     var m = Math.hypot(gx, gy, 1);
     out[0] = -gx / m; out[1] = -gy / m; out[2] = 1 / m;
   }
@@ -158,9 +162,10 @@
         var fx=uy*vz-uz*vy, fy=uz*vx-ux*vz, fz=ux*vy-uy*vx;
         var m = Math.hypot(fx,fy,fz) || 1;
         var smooth = fz / m > 0.15;
+        var mx = (ax + bx + cx) / 3, my = (ay + by + cy) / 3;
         for (var v = 0; v < 3; v++) {
           var x=tr[k+v*3], y=tr[k+v*3+1], z=tr[k+v*3+2];
-          if (smooth) topNormal(p, x, y, nrm);
+          if (smooth) topNormal(p, x, y, mx, my, nrm);
           else { nrm[0]=fx/m; nrm[1]=fy/m; nrm[2]=fz/m; }
           data[w++]=x+off[0]; data[w++]=y+off[1]; data[w++]=z+off[2];
           data[w++]=nrm[0]; data[w++]=nrm[1]; data[w++]=nrm[2];

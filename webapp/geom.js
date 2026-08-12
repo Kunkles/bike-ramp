@@ -21,7 +21,8 @@
     tabDepth: 12, tabNeck: 18, tabTip: 26, fit: 0.35, minTabH: 10,
     spikeLen: 0,       // ground spike protrusion, mm. 0 = no spike mounts
     flow: 8,           // average volumetric throughput, mm^3/s -- see estimate()
-    cell: 8            // target mesh cell size, mm
+    cell: 8,           // coarsest mesh cell, mm. Refined automatically below
+    chord: 0.05        // most a flat facet may sag below the true surface, mm
   };
 
   // Screw-in ground spikes. The socket is a plain 12-sided blind hole; the
@@ -113,6 +114,20 @@
       t = Math.PI * p.humps * h / L;
     }
     return Math.atan(t) * 180 / Math.PI;
+  }
+
+  // A flat facet sags below a curved surface by about h''*cell^2/8, so pick the
+  // cell from the sharpest curvature in the profile. A long gentle hill stays
+  // coarse and fast; a short steep one refines itself.
+  function meshCell(p) {
+    var e = p.hillLength / 400, k = 0;
+    for (var i = 1; i < 400; i++) {
+      var x = i * p.hillLength / 400;
+      var d2 = Math.abs(profX(p, x + e) - 2 * profX(p, x) + profX(p, x - e)) / (e * e);
+      if (d2 > k) k = d2;
+    }
+    if (k < 1e-9) return p.cell;
+    return Math.max(1.5, Math.min(p.cell, Math.sqrt(8 * p.chord / k)));
   }
 
   // --------------------------------------------------------------- tiling ---
@@ -292,6 +307,55 @@
     });
   }
 
+  // ------------------------------------------------------------- crease -----
+  // h is min(profX, profY), so the surface folds along the curve where the two
+  // are equal. A flat triangle cannot span that fold, and because the fold runs
+  // diagonally to the grid it comes out serrated. Split every straddling cell
+  // along it: each half then lies on one smooth branch.
+  //
+  // The cut point on a shared edge is interpolated from that edge's endpoints
+  // alone, so the neighbouring cell computes an identical point and the surface
+  // stays closed.
+  function splitAtCrease(p, poly) {
+    var g = poly.map(function (q) { return profX(p, q[0]) - profY(p, q[1]); });
+    var pos = false, neg = false, i, j;
+    for (i = 0; i < g.length; i++) {
+      if (g[i] > 0) pos = true;
+      if (g[i] < 0) neg = true;
+    }
+    if (!pos || !neg) return null;
+
+    var A = [], B = [];
+    for (i = 0; i < poly.length; i++) {
+      j = (i + 1) % poly.length;
+      if (g[i] >= 0) A.push(poly[i]);
+      if (g[i] <= 0) B.push(poly[i]);
+      if ((g[i] > 0 && g[j] < 0) || (g[i] < 0 && g[j] > 0)) {
+        var t = g[i] / (g[i] - g[j]);
+        var c = [poly[i][0] + (poly[j][0] - poly[i][0]) * t,
+                 poly[i][1] + (poly[j][1] - poly[i][1]) * t];
+        A.push(c); B.push(c);
+      }
+    }
+    // Validate rather than predict: a vertex sitting exactly on the fold, or a
+    // fold that doubles back inside one cell, both break a crossing count. If
+    // the two halves do not tile the original, leave the cell alone.
+    if (A.length < 3 || B.length < 3) return null;
+    var ar = Math.abs(area(poly));
+    if (Math.abs(Math.abs(area(A)) + Math.abs(area(B)) - ar) > 1e-6 * (ar + 1))
+      return null;
+    return [A, B];
+  }
+
+  function area(poly) {
+    var a = 0;
+    for (var i = 0; i < poly.length; i++) {
+      var b = poly[(i + 1) % poly.length];
+      a += poly[i][0] * b[1] - b[0] * poly[i][1];
+    }
+    return a / 2;
+  }
+
   // ---------------------------------------------------------- grid lines ----
   function gridLines(lo, hi, critical, cell) {
     var vals = critical.filter(function (v) { return v > lo + 1e-9 && v < hi - 1e-9; });
@@ -331,6 +395,10 @@
     pockets.forEach(function (pk) {
       pk.poly.forEach(function (q) { cx.push(q[0]); cy.push(q[1]); });
     });
+    // and on the kinks in the profiles themselves
+    if (p.bevelRun > 0) { cy.push(p.bevelRun); cy.push(p.hillWidth - p.bevelRun); }
+    if (p.shape === 'drop')
+      cx.push(p.hillLength - Math.min(p.deck, p.hillLength * 0.8));
     var xs = gridLines(bx0, bx1, cx, p.cell);
     var ys = gridLines(by0, by1, cy, p.cell);
 
@@ -372,13 +440,19 @@
           break;
         }
 
+        var push = function (q, fl) {
+          if (q.length < 3) return;
+          var halves = splitAtCrease(p, q);
+          if (!halves) { pieces.push({ poly: q, floor: fl }); return; }
+          if (halves[0].length >= 3) pieces.push({ poly: halves[0], floor: fl });
+          if (halves[1].length >= 3) pieces.push({ poly: halves[1], floor: fl });
+        };
+
         if (split) {
-          var inn = clipHalf(poly, split.e.a, split.e.b, true);
-          var out = clipHalf(poly, split.e.a, split.e.b, false);
-          if (inn.length >= 3) pieces.push({ poly: inn, floor: split.d });
-          if (out.length >= 3) pieces.push({ poly: out, floor: 0 });
+          push(clipHalf(poly, split.e.a, split.e.b, true), split.d);
+          push(clipHalf(poly, split.e.a, split.e.b, false), 0);
         } else {
-          pieces.push({ poly: poly, floor: floor });
+          push(poly, floor);
         }
       }
     }
@@ -680,6 +754,7 @@
       if (q.bedX == null) p.bedX = q.maxPrint;
       if (q.bedY == null) p.bedY = q.maxPrint;
     }
+    p.cell = meshCell(p);
     var t = tiling(p);
     var tiles = [], total = { volume: 0, areaUp: 0, areaDown: 0, areaSide: 0 };
     for (var i = 0; i < t.nx; i++) {
