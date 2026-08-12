@@ -131,25 +131,36 @@
     var out = [], L = p.hillLength, B = p.bevelRun;
 
     if (p.decal === 'checker' || p.decal === 'both') {
-      // Every square is either proud or sunk. Raising only the odd ones leaves
-      // the even ones indistinguishable from the flank around them, so the band
-      // has no edge and reads as scattered blocks rather than a checkerboard.
+      // Two levels only, split either side of the flank: proud squares meet sunk
+      // squares directly, with no strip of original surface between them.
+      //
+      // Butted exactly, four squares would meet at a point with alternating
+      // heights, which no surface can close. So the proud squares alone are
+      // grown a hair. They then bridge diagonally at each corner, the sunk ones
+      // are held apart by that bridge, and the boundary stays a clean curve.
+      // Proud squares are listed first, and the lookup takes the first match,
+      // so the overlap resolves to proud.
       var sq = Math.max(6, Math.min(14, B * 0.11));
       var d0 = B * 0.08, n = Math.floor(L / sq);
-      var pad = (L - n * sq) / 2;
-      // never sink so far that the flank meets the ground
-      var floorAt = profY(p, d0) - 0.6;
-      var down = -Math.min(p.decalRelief, Math.max(0, floorAt));
-      // Inset every square so a flat grout line runs between them. Butted up,
-      // four squares meet at a point with alternating heights -- a singularity
-      // no surface can close. Apart, each one is an island with its own tidy
-      // loop of steps, and it reads more like tile anyway.
-      var g = 0.6;
-      for (var i = 0; i < n; i++)
-        for (var r = 0; r < 2; r++)
-          out.push([pad + i * sq + g, d0 + r * sq + g,
-                    pad + (i + 1) * sq - g, d0 + (r + 1) * sq - g,
-                    (i + r) % 2 === 0 ? p.decalRelief : down]);
+      var pad = (L - n * sq) / 2, e = 0.15;
+      var half = p.decalRelief / 2;
+      var down = -Math.min(half, Math.max(0, profY(p, d0) - 0.6));
+      // Grow the proud squares inward only -- clamped to the band, so its outer
+      // edge stays a single clean rectangle. Letting them spill past it leaves
+      // 0.15mm slivers of untouched flank along the border.
+      var bx0 = pad, bx1 = pad + n * sq, bd0 = d0, bd1 = d0 + 2 * sq;
+      var cl = function (v, lo, hi) { return Math.min(hi, Math.max(lo, v)); };
+      var ups = [], dns = [], i, r;
+      for (i = 0; i < n; i++)
+        for (r = 0; r < 2; r++) {
+          var a = pad + i * sq, b = d0 + r * sq;
+          if ((i + r) % 2 === 0)
+            ups.push([cl(a - e, bx0, bx1), cl(b - e, bd0, bd1),
+                      cl(a + sq + e, bx0, bx1), cl(b + sq + e, bd0, bd1), half]);
+          else
+            dns.push([a, b, a + sq, b + sq, down]);
+        }
+      out = out.concat(ups, dns);
     }
 
     if (p.decal === 'text' || p.decal === 'both') {
@@ -716,13 +727,13 @@
         }
       }
     }
-    return buildSolid(p, pieces, pockets);
+    return buildSolid(p, pieces, pockets, levels.slice().sort(function (a, b) { return a - b; }));
   }
 
   // Lift each plan piece onto the height field over its own floor, cap the
   // underside, and wall in whatever a neighbour does not cover: the outside of
   // the tile from floor to surface, and the step wherever two floors differ.
-  function buildSolid(p, pieces, pockets) {
+  function buildSolid(p, pieces, pockets, levels) {
     var tris = [], edges = new Map(), Q = 1e4;
     var key = function (x, y) { return Math.round(x * Q) + ':' + Math.round(y * Q); };
 
@@ -815,11 +826,21 @@
             else wall(lo.a, lo.b, lo.f, lo.f, top, top);
           }
           if (Math.abs(o.rel - rel) > 1e-9) {      // decal step, at the surface
-            var hi = rel > o.rel ? { a: a, b: b, r: rel } : { a: o.a, b: o.b, r: o.rel };
-            var lr = Math.min(rel, o.rel);
-            wall(hi.a, hi.b,
-                 topOf(p, lr, hi.a[0], hi.a[1]), topOf(p, lr, hi.b[0], hi.b[1]),
-                 topOf(p, hi.r, hi.a[0], hi.a[1]), topOf(p, hi.r, hi.b[0], hi.b[1]));
+            var hh = rel > o.rel ? { a: a, b: b } : { a: o.a, b: o.b };
+            var loR = Math.min(rel, o.rel), hiR = Math.max(rel, o.rel);
+            // Subdivide at every relief level in between. Where proud, sunk and
+            // flat all meet along one line, the tall wall spans what the two
+            // shorter ones cover between them; without the split its edge is a
+            // T-junction against theirs and the surface will not close.
+            var seq = [loR];
+            for (var z = 0; z < levels.length; z++)
+              if (levels[z] > loR + 1e-9 && levels[z] < hiR - 1e-9) seq.push(levels[z]);
+            seq.push(hiR);
+            for (z = 0; z + 1 < seq.length; z++)
+              wall(hh.a, hh.b,
+                   topOf(p, seq[z], hh.a[0], hh.a[1]), topOf(p, seq[z], hh.b[0], hh.b[1]),
+                   topOf(p, seq[z + 1], hh.a[0], hh.a[1]),
+                   topOf(p, seq[z + 1], hh.b[0], hh.b[1]));
           }
         } else edges.set(ka + '|' + kb, { a: a, b: b, f: f, rel: rel });
       }

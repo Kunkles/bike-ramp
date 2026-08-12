@@ -156,9 +156,11 @@ than the roller).
 ## Decals
 
 Relief graphics on the side flanks — a blocky stencil word and a checkered band.
-The checker alternates **proud and sunk** squares with a flat grout line between
-them; raising only the odd squares leaves the rest indistinguishable from the
-flank, so the band has no edge and reads as scattered blocks rather than checks.
+The checker is **two levels only** — squares sit ±0.6 mm either side of the
+flank, proud meeting sunk directly with no strip of original surface between
+them. Raising only the odd squares leaves the rest indistinguishable from the
+flank, so the band has no edge; a grout line between them reads as a third
+level and puts a ridge round every square.
 Both flanks are laid out to read the right way round from their own side.
 Type whatever you like in **Says**; A–Z, 0–9 and a few marks are supported and
 anything else is dropped.

@@ -155,17 +155,25 @@ module hill_solid() {
         // outside -- so union the plain hill with the raised hill clipped to
         // the blocks. The min() is what keeps a decal from ever standing above
         // the riding surface.
+        // One pass per distinct relief. Checker squares stand at half the
+        // relief and letters at all of it, so raising every proud block by the
+        // same amount would lift the checker twice as far as it should.
         difference() {
             union() {
                 intersection() { sweep_x(); sweep_y(); }
-                intersection() {                       // proud blocks
-                    sweep_x();
-                    translate([0, 0, decal_relief]) sweep_y();
-                    decal_prisms(1);
-                }
+                for (lv = [decal_relief / 2, decal_relief])
+                    intersection() {                   // proud blocks
+                        sweep_x();
+                        translate([0, 0, lv]) sweep_y();
+                        decal_prisms_at(lv);
+                    }
             }
             intersection() {                           // sunk blocks
-                decal_prisms(-1);
+                difference() {
+                    decal_prisms_at(decal_down());
+                    decal_prisms_at(decal_relief / 2);
+                    decal_prisms_at(decal_relief);
+                }
                 difference() {
                     intersection() { sweep_x(); sweep_y(); }
                     intersection() {
@@ -233,7 +241,7 @@ function decal_glyph(ch) =
 // serves both flanks and each reads the right way round from its own side.
 // Never sink so far that the flank meets the ground.
 function decal_down() =
-    -min(decal_relief, max(0, prof_y(bevel_run * 0.08) - 0.6));
+    -min(decal_relief / 2, max(0, prof_y(bevel_run * 0.08) - 0.6));
 
 // Every square is either proud or sunk -- raising only the odd ones leaves the
 // rest indistinguishable from the flank, so the band has no edge. Each square
@@ -245,14 +253,18 @@ function decal_checker() =
            d0 = bevel_run * 0.08,
            n  = floor(hill_length / sq),
            pad = (hill_length - n * sq) / 2,
-           g = 0.6)
-      [for (i = [0 : max(0, n - 1)], r = [0 : 1])
-         [pad + i * sq + g, d0 + r * sq + g,
-          pad + (i + 1) * sq - g, d0 + (r + 1) * sq - g,
-          (i + r) % 2 == 0 ? decal_relief : decal_down()]];
+           e = 0.15, half = decal_relief / 2,
+           bx1 = pad + n * sq, bd1 = d0 + 2 * sq)
+      concat(
+        // proud squares, grown inward only so the band keeps a clean outer edge
+        [for (i = [0 : max(0, n - 1)], r = [0 : 1]) if ((i + r) % 2 == 0)
+           let (a = pad + i * sq, b = d0 + r * sq)
+           [max(pad, a - e), max(d0, b - e),
+            min(bx1, a + sq + e), min(bd1, b + sq + e), half]],
+        [for (i = [0 : max(0, n - 1)], r = [0 : 1]) if ((i + r) % 2 != 0)
+           let (a = pad + i * sq, b = d0 + r * sq)
+           [a, b, a + sq, b + sq, decal_down()]]);
 
-// One word per line. A single long line has to cross the joints, where it gets
-// trimmed away; stacked words make a compact block that sits inside one tile.
 function decal_words() =
     let (raw = [for (w = split_words(decal_text)) [for (c = [0 : max(0, len(w) - 1)])
                   if (!is_undef(decal_glyph(w[c]))) w[c]]])
@@ -333,9 +345,9 @@ function decal_rects() =
 // The far flank is viewed from the opposite direction, where the run reads the
 // other way, so it is mirrored along the length -- otherwise the lettering comes
 // out backwards on that side.
-module decal_prisms(up) {
+module decal_prisms_at(rel) {
     union()
-        for (r = decal_rects()) if ((r[4] > 0) == (up > 0)) {
+        for (r = decal_rects()) if (abs(r[4] - rel) < 1e-9) {
             translate([r[0], r[1], -1])
                 cube([r[2] - r[0], r[3] - r[1], BIG]);
             translate([hill_length - r[2], hill_width - r[3], -1])
