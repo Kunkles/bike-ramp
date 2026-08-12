@@ -1,11 +1,15 @@
 // ============================================================================
 //  geom.js -- the bikeramp.scad model, reimplemented as a mesh generator.
 //
-//  The tile solid is { (x,y,z) : (x,y) in footprint, 0 <= z <= h(x,y) }, so it
-//  needs no CSG: mesh the footprint on a grid whose lines are placed at every
-//  dovetail feature edge, clip the few straddling cells against a single
-//  half-plane each, and lift the result onto the height field. Adjacent cells
-//  cut against the same global line, so the surface stays watertight.
+//  The tile is a solid between two height fields over a polygonal footprint, so
+//  it needs no CSG. Mesh the footprint on a grid whose lines fall on every
+//  dovetail, socket and profile kink; clip the few straddling cells against a
+//  single half-plane each; split cells that straddle the fold in the surface;
+//  then lift the result. Every cut is computed from geometry the neighbouring
+//  cell shares, so the mesh stays watertight.
+//
+//  Two things are not height fields and are built directly: the socket wall,
+//  which is lofted so its bore can follow a helix, and the spike itself.
 //
 //  Runs in node (module.exports) and in the browser (window.BikeRamp).
 // ============================================================================
@@ -25,8 +29,9 @@
     chord: 0.05        // most a flat facet may sag below the true surface, mm
   };
 
-  // Screw-in ground spikes. The socket is a plain 12-sided blind hole; the
-  // spike's coarse thread forms its own groove in it, so it can be backed out.
+  // Screw-in ground spikes. The socket carries a real matching thread: its wall
+  // is lofted rather than extruded, so the bore radius can follow the helix
+  // while its rim still lands exactly on the plan polygon.
   var SPIKE = {
     socketDepth: 11, gon: 24,
     roof: 5,           // material left between socket ceiling and riding surface
@@ -52,14 +57,14 @@
     u -= Math.floor(u);
     return 1 - Math.abs(2 * u - 1);       // symmetric, so handedness cannot bite
   }
-  // Bore radius on the socket wall. Plain at both ends so the rim and the
-  // ceiling land exactly on the plan polygon.
   // Material radius on the spike's stud, tapering out over the first turn so
   // the screw starts easily.
   function spikeRadius(th, z) {
     return SPIKE.minor + (SPIKE.major - SPIKE.minor) *
            Math.min(1, z / SPIKE.lead) * threadCrest(th, z);
   }
+  // Bore radius on the socket wall. Plain at both ends so the rim and the
+  // ceiling land exactly on the plan polygon.
   function socketRadius(th, z) {
     if (z <= SPIKE.threadLead || z >= SPIKE.socketDepth - SPIKE.threadRelief)
       return SPIKE.socketR;
@@ -459,8 +464,6 @@
     return buildSolid(p, pieces, pockets);
   }
 
-  // Lift the plan polygons onto the height field, close the bottom, and wall in
-  // whichever plan edges did not cancel against a neighbour.
   // Lift each plan piece onto the height field over its own floor, cap the
   // underside, and wall in whatever a neighbour does not cover: the outside of
   // the tile from floor to surface, and the step wherever two floors differ.
