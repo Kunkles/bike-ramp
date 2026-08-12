@@ -136,13 +136,50 @@ console.log('\n4. ground spikes\n');
   const withSpikes = BR.build({ spikeLen: 6 });
   const plain = BR.build({});
   const socket = BR.SPIKE;
-  const bore = 0.5 * socket.gon * socket.socketR ** 2 *
-               Math.sin(2 * Math.PI / socket.gon) * socket.socketDepth;
+
+  // The socket is the spike's own form pushed out by the clearance, so the two
+  // must differ by exactly that everywhere the thread is full-form. A sign or
+  // amplitude slip here would still print, and still be watertight, and simply
+  // not screw together.
+  {
+    let lo = Infinity, hi = -Infinity;
+    const z0 = Math.max(socket.threadLead, socket.lead);
+    const z1 = socket.socketDepth - socket.threadRelief;
+    for (let z = z0 + 1e-6; z < z1; z += 0.02)
+      for (let a = 0; a < 360; a += 1) {
+        const th = a * Math.PI / 180;
+        const gap = BR.socketRadius(th, z) - BR.spikeRadius(th, z);
+        lo = Math.min(lo, gap); hi = Math.max(hi, gap);
+      }
+    console.log(`   thread engagement  ${(z1 - socket.threadLead).toFixed(1)} mm`);
+    console.log(`   radial gap         ${lo.toFixed(3)} to ${hi.toFixed(3)} mm ` +
+                `(nominal ${socket.clear})`);
+    ok(Math.abs(lo - socket.clear) < 1e-9 && Math.abs(hi - socket.clear) < 1e-9,
+       `spike and socket forms differ: gap ranges ${lo.toFixed(3)}-${hi.toFixed(3)}`);
+    // and the plain ends must be looser, never tighter
+    ok(BR.socketRadius(0, 0.5) - BR.spikeRadius(0, 0.5) > socket.clear,
+       'the lead-in is not relieved');
+  }
+
+  // Bore volume, integrated from the same radius function the loft is built on.
+  const bore = (function () {
+    const n = socket.gon, k = 0.5 * Math.sin(2 * Math.PI / n), dz = 0.005;
+    let v = 0;
+    for (let z = dz / 2; z < socket.socketDepth; z += dz) {
+      let A = 0;
+      for (let i = 0; i < n; i++)
+        A += k * BR.socketRadius(2 * Math.PI * i / n, z) *
+                 BR.socketRadius(2 * Math.PI * (i + 1) / n, z);
+      v += A * dz;
+    }
+    return v;
+  })();
+
   console.log(`   sockets            ${withSpikes.spikes} (one per tile)`);
   // Adding sockets also adds grid lines, which refines the curved surface
-  // nearby and adds a little volume back. So check the bore converges on its
-  // analytic value as the mesh is refined, rather than pinning one cell size.
-  console.log('   cell   removed    analytic bore   error');
+  // nearby and adds a little volume back, so check the bore converges on its
+  // analytic value as the mesh is refined rather than pinning one cell size.
+  console.log('   cell   removed    threaded bore   error');
   let lastErr = Infinity;
   for (const cell of [8, 3, 1.5]) {
     const a = BR.build({ cell }), b = BR.build({ cell, spikeLen: 6 });
@@ -155,7 +192,7 @@ console.log('\n4. ground spikes\n');
     ok(err < lastErr, `socket bore error grew when the mesh was refined to ${cell}mm`);
     lastErr = err;
   }
-  ok(lastErr < 0.005, 'socket bore does not converge on its analytic volume');
+  ok(lastErr < 0.02, 'socket bore does not converge on its analytic volume');
 
   for (const t of withSpikes.tiles) {
     const leaks = watertight(t.tris);

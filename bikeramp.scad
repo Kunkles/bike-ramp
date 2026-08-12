@@ -34,14 +34,16 @@ min_tab_h   = 10;    // skip dovetails where the hill is shorter than this
 
 /* [Ground spikes] */
 spike_len     = 0;    // spike protrusion below the tile, mm. 0 = no sockets at all
-socket_r      = 7.3;  // socket circumradius (12-sided blind hole)
 socket_depth  = 11;
 socket_roof   = 5;    // material left between socket ceiling and riding surface
-socket_gon    = 12;
+socket_gon    = 24;
+spike_clear   = 0.25; // radial clearance, spike to socket
+thread_lead   = 1.5;  // plain bore at the mouth, to start the screw
+thread_relief = 1.5;  // plain bore at the far end, so the ceiling closes flat
 spike_inset   = 30;   // keep sockets clear of tile edges and their dovetails
 spike_scan    = 10;   // grid the tile is searched on for its thickest point
 spike_minor   = 6.5;  // thread core radius
-spike_major   = 7.45; // thread crest radius -- bites into the plain socket wall
+spike_major   = 7.45; // thread crest radius
 spike_pitch   = 3.0;
 spike_stud    = 10;
 spike_chamfer = 1.5;
@@ -223,11 +225,36 @@ function spike_spot(i, j) =
       best < socket_depth + socket_roof ? []
       : [ [for (q = c) if (q[2] >= best - 1e-9) [q[0], q[1]]][0] ];
 
+// The socket carries the spike's own thread form, pushed out by the clearance,
+// so the two mate at every point. Plain bore at both ends: a lead-in to start
+// the screw, and a relief so the ceiling closes flat.
+socket_crest_r = spike_minor + spike_clear;   // bore at its tightest
+socket_r       = spike_major + spike_clear;   // groove, and the plain bore
+
+function socket_profile(n) =
+    [for (k = [0 : n - 1])
+        let (a = 360 * k / n, u = k / n, t = 1 - abs(2 * u - 1),
+             r = socket_crest_r + (socket_r - socket_crest_r) * t)
+        [r * cos(a), r * sin(a)]];
+
+module socket_bore() {
+    th = socket_depth - thread_lead - thread_relief;
+    union() {
+        translate([0, 0, -1])
+            cylinder(h = thread_lead + 1, r = socket_r, $fn = socket_gon);
+        translate([0, 0, thread_lead])
+            linear_extrude(height = th, twist = -360 * th / spike_pitch,
+                           slices = ceil(th * 12), convexity = 8)
+                polygon(socket_profile(socket_gon));
+        translate([0, 0, socket_depth - thread_relief])
+            cylinder(h = thread_relief, r = socket_r, $fn = socket_gon);
+    }
+}
+
 module spike_sockets(i, j) {
     if (spike_len > 0)
         for (q = spike_spot(i, j))
-            translate([q[0], q[1], -1])
-                cylinder(h = socket_depth + 1, r = socket_r, $fn = socket_gon);
+            translate([q[0], q[1], 0]) socket_bore();
 }
 
 // The spike itself. Printed stud-down, tapering upward, so nothing overhangs.

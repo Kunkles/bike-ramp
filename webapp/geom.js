@@ -27,14 +27,44 @@
   // Screw-in ground spikes. The socket is a plain 12-sided blind hole; the
   // spike's coarse thread forms its own groove in it, so it can be backed out.
   var SPIKE = {
-    socketR: 7.3, socketDepth: 11, gon: 12,
+    socketDepth: 11, gon: 24,
     roof: 5,           // material left between socket ceiling and riding surface
     scan: 10,          // grid the tile is searched on for its thickest point
     inset: 30,         // keep clear of tile edges and their dovetails
-    minor: 6.5, major: 7.45, pitch: 3.0, studH: 10, lead: 2.5,
+
+    minor: 6.5, major: 7.45,       // spike thread: root and crest radius
+    clear: 0.25,                   // radial clearance, spike to socket
+    pitch: 3.0, studH: 10, lead: 2.5,
+    threadLead: 1.5,   // plain bore at the mouth, to start the screw
+    threadRelief: 1.5, // plain bore at the far end, so the ceiling closes flat
+
     chamfer: 1.5, flangeR: 9.0, flangeH: 1.5, coneR: 7.5, tipR: 0.6,
-    seg: 72
+    seg: 72, zStep: 0.25
   };
+  // The socket is the spike's own profile pushed out by the clearance, so the
+  // two forms are identical and mate at every point.
+  SPIKE.socketCrestR = SPIKE.minor + SPIKE.clear;   // bore at its tightest
+  SPIKE.socketR      = SPIKE.major + SPIKE.clear;   // groove, and the plain bore
+
+  function threadCrest(th, z) {
+    var u = z / SPIKE.pitch - th / (2 * Math.PI);
+    u -= Math.floor(u);
+    return 1 - Math.abs(2 * u - 1);       // symmetric, so handedness cannot bite
+  }
+  // Bore radius on the socket wall. Plain at both ends so the rim and the
+  // ceiling land exactly on the plan polygon.
+  // Material radius on the spike's stud, tapering out over the first turn so
+  // the screw starts easily.
+  function spikeRadius(th, z) {
+    return SPIKE.minor + (SPIKE.major - SPIKE.minor) *
+           Math.min(1, z / SPIKE.lead) * threadCrest(th, z);
+  }
+  function socketRadius(th, z) {
+    if (z <= SPIKE.threadLead || z >= SPIKE.socketDepth - SPIKE.threadRelief)
+      return SPIKE.socketR;
+    return SPIKE.socketCrestR +
+           (SPIKE.socketR - SPIKE.socketCrestR) * threadCrest(th, z);
+  }
 
   // -------------------------------------------------------------- profile ---
   // Three lengthwise profiles. 'roller' comes back down to the ground; 'drop'
@@ -255,7 +285,7 @@
                        Math.max(a[0], b[0]), Math.max(a[1], b[1])] };
       });
       return {
-        poly: poly, edges: edges, depth: SPIKE.socketDepth,
+        poly: poly, edges: edges, depth: SPIKE.socketDepth, c: c,
         bbox: [Math.min.apply(null, xs), Math.min.apply(null, ys),
                Math.max.apply(null, xs), Math.max.apply(null, ys)]
       };
@@ -352,7 +382,7 @@
         }
       }
     }
-    return buildSolid(p, pieces);
+    return buildSolid(p, pieces, pockets);
   }
 
   // Lift the plan polygons onto the height field, close the bottom, and wall in
@@ -360,7 +390,7 @@
   // Lift each plan piece onto the height field over its own floor, cap the
   // underside, and wall in whatever a neighbour does not cover: the outside of
   // the tile from floor to surface, and the step wherever two floors differ.
-  function buildSolid(p, pieces) {
+  function buildSolid(p, pieces, pockets) {
     var tris = [], edges = new Map(), Q = 1e4;
     var key = function (x, y) { return Math.round(x * Q) + ':' + Math.round(y * Q); };
 
@@ -371,6 +401,49 @@
     function wall(a, b, za0, zb0, za1, zb1) {
       tri(a[0], a[1], za0, b[0], b[1], zb0, b[0], b[1], zb1);
       tri(a[0], a[1], za0, b[0], b[1], zb1, a[0], a[1], za1);
+    }
+
+    // Which socket, if either, this plan edge runs along.
+    // Grid lines cut the polygon edges into sub-segments whose ends sit on a
+    // chord, inside the circumradius -- so test the whole boundary band, not
+    // just the vertices. Getting this wrong leaves some of the rim extruded
+    // flat and some lofted, which tears the mesh open.
+    function pocketOn(a, b) {
+      if (!pockets) return null;
+      var inner = SPIKE.socketR * Math.cos(Math.PI / SPIKE.gon) - 0.05;
+      var outer = SPIKE.socketR + 0.05;
+      var on = function (q, c) {
+        var d = Math.hypot(q[0] - c[0], q[1] - c[1]);
+        return d >= inner && d <= outer;
+      };
+      for (var k = 0; k < pockets.length; k++)
+        if (on(a, pockets[k].c) && on(b, pockets[k].c)) return pockets[k];
+      return null;
+    }
+
+    // The socket wall, lofted instead of extruded: each plan point is pushed
+    // along its own radius by however much the thread differs from the plain
+    // bore. That offset is zero at both ends, so the rim and the ceiling still
+    // land exactly on the plan polygon and the mesh stays one closed body.
+    function threadWall(pk, a, b, z0, z1) {
+      var c = pk.c;
+      var ta = Math.atan2(a[1] - c[1], a[0] - c[0]);
+      var tb = Math.atan2(b[1] - c[1], b[0] - c[0]);
+      var ua = [Math.cos(ta), Math.sin(ta)], ub = [Math.cos(tb), Math.sin(tb)];
+      var at = function (q, u, th, z) {
+        var d = socketRadius(th, z) - SPIKE.socketR;
+        return [q[0] + u[0] * d, q[1] + u[1] * d];
+      };
+      var zs = [z0], z;
+      for (z = z0 + SPIKE.zStep; z < z1 - 1e-9; z += SPIKE.zStep) zs.push(z);
+      zs.push(z1);
+      for (var k = 0; k < zs.length - 1; k++) {
+        var lo = zs[k], hi = zs[k + 1];
+        var a0 = at(a, ua, ta, lo), b0 = at(b, ub, tb, lo);
+        var a1 = at(a, ua, ta, hi), b1 = at(b, ub, tb, hi);
+        tri(a0[0], a0[1], lo, b0[0], b0[1], lo, b1[0], b1[1], hi);
+        tri(a0[0], a0[1], lo, b1[0], b1[1], hi, a1[0], a1[1], hi);
+      }
     }
 
     pieces.forEach(function (pc) {
@@ -393,8 +466,11 @@
           var o = edges.get(rev);
           edges.delete(rev);
           if (Math.abs(o.f - f) > 1e-6) {          // socket wall
-            if (f < o.f) wall(a, b, f, f, o.f, o.f);
-            else wall(o.a, o.b, o.f, o.f, f, f);
+            var lo = f < o.f ? { a: a, b: b, f: f } : { a: o.a, b: o.b, f: o.f };
+            var top = Math.max(f, o.f);
+            var pk = pocketOn(lo.a, lo.b);
+            if (pk) threadWall(pk, lo.a, lo.b, lo.f, top);
+            else wall(lo.a, lo.b, lo.f, lo.f, top, top);
           }
         } else edges.set(ka + '|' + kb, { a: a, b: b, f: f });
       }
@@ -477,12 +553,7 @@
       var a = ((th % (Math.PI / 3)) + Math.PI / 3) % (Math.PI / 3);
       return inr / Math.cos(a - Math.PI / 6);
     }
-    function threadR(th, z) {
-      var u = z / S.pitch - th / (2 * Math.PI);
-      u -= Math.floor(u);
-      var crest = 1 - Math.abs(2 * u - 1);
-      return S.minor + (S.major - S.minor) * Math.min(1, z / S.lead) * crest;
-    }
+    var threadR = spikeRadius;
     function rAt(th, z, band) {
       if (band === 'thread') return threadR(th, z);
       if (band === 'chamfer') {
@@ -649,6 +720,8 @@
               measure: measure, estimate: estimate, tileMesh: tileMesh,
               stlBinary: stlBinary, zip: zip,
               SPIKE: SPIKE, spikeSpots: spikeSpots, spikeMesh: spikeMesh,
+              socketRadius: socketRadius, spikeRadius: spikeRadius,
+              threadCrest: threadCrest,
               xseamTabs: xseamTabs, yseamTabs: yseamTabs };
 
   if (typeof module === 'object' && module.exports) module.exports = api;

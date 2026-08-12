@@ -151,12 +151,22 @@ least 5 mm of deck left above it — and you print one screw-in spike per socket
 The toes are only a millimetre or two thick so they get none; the dovetails tie
 them to the tiles that are pegged down.
 
-The socket is a plain bore. The spike's thread is coarse (3 mm pitch, 0.4 mm
-radial interference) and cuts its own groove going in, so the first turn is
-stiff — grip the hex flange with pliers if you need to — and it backs out again
-for indoor use. Print the spikes stud-down exactly as oriented, no supports,
-4 walls and 40% infill; they're 1–2 g each. With spikes fitted the hill stands
-about 3 mm off the ground.
+**The socket is threaded to match the spike** — the same 3 mm-pitch form pushed
+out by 0.25 mm of radial clearance, so the two mate at every point rather than
+the spike cutting its own groove. There is 8 mm of engagement, a plain lead-in
+at the mouth to start the screw and a relief at the far end so the ceiling
+closes flat. Wind one in by the hex flange until it meets the tile; they unscrew
+again for indoor use.
+
+Print the spikes stud-down exactly as oriented, no supports, 4 walls and 40%
+infill; they're 1–2 g each. With spikes fitted the hill stands about 3 mm off
+the ground.
+
+Making that thread work meant lofting the socket wall rather than extruding it:
+a helix is not a height field, but the bore radius can follow one if each rim
+point is pushed along its own radius, and that offset is zero at both plain ends
+so the rim and ceiling still land exactly on the plan polygon. The tile stays a
+single closed body.
 
 Spike length is ¼, ½ or 1 inch (6 / 13 / 25 mm). ¼ inch is plenty for lawn.
 Set it to **None** for a flat underside with no sockets at all — but the socket
@@ -227,9 +237,13 @@ Geometry only — nothing here has been printed or ridden.
 - All three shapes stay watertight, including the vertical end face, across
   extremes of height, deck length and zero side taper.
 - Spike sockets keep every tile watertight, and the volume they remove
-  converges on the analytic bore as the mesh is refined (1.6% at the default
-  8 mm cell, 0.08% at 1.5 mm — the residue is surface discretisation, not the
-  socket).
+  converges on the analytic threaded bore as the mesh is refined (1.6% at the
+  default 8 mm cell, 0.2% at 1.5 mm — the residue is surface discretisation,
+  not the socket).
+- Spike and socket are sampled against each other over the whole engaged band:
+  the radial gap is 0.250 mm everywhere, to within floating point. A sign or
+  amplitude slip in either thread would still print and still be watertight, and
+  simply not screw together — so this is checked directly rather than inferred.
 
 The shell/infill and print-time numbers above are analytical, not measured.
 Per-printer throughput figures are rough classes; the app exposes the number so

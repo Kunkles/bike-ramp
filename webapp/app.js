@@ -3,10 +3,7 @@
   var BR = window.BikeRamp;
 
   // ------------------------------------------------------------------ state --
-  var state = Object.assign({}, BR.DEFAULTS, {
-    spikeLen: 6, infill: 0.15, colour: '#E2620A', mode: 'assembled', isolate: null
-  });
-  var result = null;
+  var state = null, result = null;
 
   var PRESETS = {
     'First hill':  { shape:'roller', hillLength:600, hillWidth:300, hillHeight:45,
@@ -54,6 +51,15 @@
     { name:'Creality K1 Max',                 x:300, y:300, flow:10 },
     { name:'Voron 2.4 / Trident (350)',       x:350, y:350, flow:11 }
   ];
+
+  // Start on the first machine in the list, so the dropdown, the bed and the
+  // throughput all agree on load.
+  state = Object.assign({}, BR.DEFAULTS, {
+    bedX: PRINTERS[0].x - BED_MARGIN,
+    bedY: PRINTERS[0].y - BED_MARGIN,
+    flow: PRINTERS[0].flow,
+    spikeLen: 6, infill: 0.15, colour: '#E2620A', mode: 'assembled', isolate: null
+  });
 
   var SPIKE_OPTS = [
     { label:'None',    v:0 },
@@ -564,9 +570,9 @@
     });
     sg.appendChild(schips);
     sg.appendChild(el('p', 'hint',
-      'Adds one blind socket under each tile that is thick enough, plus a ' +
-      'screw-in spike to print. Grips grass; take them out for indoors. The ' +
-      'flange holds the hill 3 mm off the ground.'));
+      'Adds one threaded socket under each tile that is thick enough, plus a ' +
+      'matching screw-in spike to print. Grips grass; unscrew them for ' +
+      'indoors. The flange holds the hill 3 mm off the ground.'));
     host.appendChild(sg);
     return host;
 
@@ -780,9 +786,12 @@
       '  Print ' + result.spikes + ' of spike_x' + result.spikes + '.stl -- same settings,',
       '  but 4 walls and 40% infill; they are small and take the load.',
       '  Print them stud-down, exactly as oriented. No supports.',
-      '  Screw one into each socket. The thread cuts its own groove in the plain',
-      '  bore, so the first turn is stiff -- grip the hex flange with pliers if',
-      '  you need to. They back out again for indoor use.',
+      '  The socket is threaded to match, 3 mm pitch, 0.25 mm clearance, with a',
+      '  plain lead-in at the mouth to start the screw. Wind one into each',
+      '  socket by the hex flange until the flange meets the tile; they unscrew',
+      '  again for indoor use.',
+      '  If one binds, work it in and out once to bed the thread -- Joint',
+      '  clearance is for the dovetails and will not help here.',
       '  With spikes fitted the hill stands about 3 mm off the ground.', ''
     ] : [])).join('\n');
   }
