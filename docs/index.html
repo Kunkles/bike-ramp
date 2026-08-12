@@ -320,6 +320,12 @@ input[type=range]::-moz-range-thumb {
 .select:hover { border-color:var(--ink-3); }
 .select:focus { border-color:var(--ice); outline:none; }
 .ctrl-val .x { color:var(--ink-3); font-size:11px; padding:0 1px; }
+.text-in {
+  width:100%; font-family:var(--display); font-size:19px; letter-spacing:.04em;
+  color:var(--accent); background:var(--sunk); border:2px solid var(--line);
+  border-radius:5px; padding:5px 9px; text-transform:uppercase;
+}
+.text-in:focus { border-color:var(--ice); outline:none; background:var(--panel); }
 
 /* ---------------------------------------------------------------- mobile -- */
 @media (max-width:860px) {
@@ -409,6 +415,9 @@ input[type=range]::-moz-range-thumb {
     tabDepth: 12, tabNeck: 18, tabTip: 26, fit: 0.35, minTabH: 10,
     spikeLen: 0,       // ground spike protrusion, mm. 0 = no spike mounts
     flow: 8,           // average volumetric throughput, mm^3/s -- see estimate()
+    decal: 'none',     // 'none' | 'text' | 'checker' | 'both'
+    decalText: 'LITTLE RIPPER',
+    decalRelief: 1.2,  // how far the decal stands proud of the flank, mm
     cell: 8,           // coarsest mesh cell, mm. Refined automatically below
     chord: 0.05        // most a flat facet may sag below the true surface, mm
   };
@@ -456,6 +465,149 @@ input[type=range]::-moz-range-thumb {
            (SPIKE.socketR - SPIKE.socketCrestR) * threadCrest(th, z);
   }
 
+  // --------------------------------------------------------------- decals ---
+  // Raised graphics live on the side flanks only. Nothing goes on the riding
+  // surface: a relief pattern under a 12" wheel is a bump and a trip edge.
+  //
+  // A blocky 5x7 stencil keeps every edge axis-aligned, so each one lands on a
+  // mesh grid line exactly and the letters come out crisp rather than serrated.
+  var FONT = {"A":[".###.","#...#","#...#","#####","#...#","#...#","#...#"],
+    "B":["####.","#...#","####.","#...#","#...#","#...#","####."],
+    "C":[".####","#....","#....","#....","#....","#....",".####"],
+    "D":["####.","#...#","#...#","#...#","#...#","#...#","####."],
+    "E":["#####","#....","####.","#....","#....","#....","#####"],
+    "F":["#####","#....","####.","#....","#....","#....","#...."],
+    "G":[".####","#....","#....","#..##","#...#","#...#",".####"],
+    "H":["#...#","#...#","#####","#...#","#...#","#...#","#...#"],
+    "I":["#####","..#..","..#..","..#..","..#..","..#..","#####"],
+    "J":["####.","...#.","...#.","...#.","...#.","#..#.",".##.."],
+    "K":["#...#","#..#.","##...","##...","#.#..","#..#.","#...#"],
+    "L":["#....","#....","#....","#....","#....","#....","#####"],
+    "M":["#...#","##.##","#.#.#","#...#","#...#","#...#","#...#"],
+    "N":["#...#","##..#","#.#.#","#..##","#...#","#...#","#...#"],
+    "O":[".###.","#...#","#...#","#...#","#...#","#...#",".###."],
+    "P":["####.","#...#","#...#","####.","#....","#....","#...."],
+    "Q":[".###.","#...#","#...#","#...#","#.#.#","#..#.",".##.#"],
+    "R":["####.","#...#","#...#","####.","#.#..","#..#.","#...#"],
+    "S":[".####","#....","#....",".###.","....#","....#","####."],
+    "T":["#####","..#..","..#..","..#..","..#..","..#..","..#.."],
+    "U":["#...#","#...#","#...#","#...#","#...#","#...#",".###."],
+    "V":["#...#","#...#","#...#","#...#","#...#",".#.#.","..#.."],
+    "W":["#...#","#...#","#...#","#...#","#.#.#","##.##","#...#"],
+    "X":["#...#",".#.#.","..#..","..#..","..#..",".#.#.","#...#"],
+    "Y":["#...#",".#.#.","..#..","..#..","..#..","..#..","..#.."],
+    "Z":["#####","....#","...#.","..#..",".#...","#....","#####"],
+    "0":[".###.","#..##","#.#.#","#.#.#","##..#","#...#",".###."],
+    "1":["..#..",".##..","..#..","..#..","..#..","..#..",".###."],
+    "2":[".###.","#...#","....#","...#.","..#..",".#...","#####"],
+    "3":["####.","....#","....#",".###.","....#","....#","####."],
+    "4":["#..#.","#..#.","#..#.","#####","...#.","...#.","...#."],
+    "5":["#####","#....","####.","....#","....#","#...#",".###."],
+    "6":[".###.","#....","####.","#...#","#...#","#...#",".###."],
+    "7":["#####","....#","...#.","..#..",".#...",".#...",".#..."],
+    "8":[".###.","#...#","#...#",".###.","#...#","#...#",".###."],
+    "9":[".###.","#...#","#...#",".####","....#","....#",".###."],
+    " ":[".....",".....",".....",".....",".....",".....","....."],
+    "-":[".....",".....",".....","#####",".....",".....","....."],
+    ".":[".....",".....",".....",".....",".....",".##..",".##.."],
+    "'":["..#..","..#..",".....",".....",".....",".....","....."],
+    "!":["..#..","..#..","..#..","..#..","..#..",".....","..#.."]};
+
+  // Decal rectangles in (x, d) where d is distance in from the nearer side, so
+  // one list serves both flanks and each reads the right way round from its own
+  // side. Returned as [x0, d0, x1, d1].
+  function decalRects(p) {
+    if (p.decal === 'none' || p.bevelRun <= 0) return [];
+    var out = [], L = p.hillLength, B = p.bevelRun;
+
+    if (p.decal === 'checker' || p.decal === 'both') {
+      var sq = Math.max(6, Math.min(14, B * 0.11));
+      var d0 = B * 0.06, n = Math.floor(L / sq);
+      var pad = (L - n * sq) / 2;
+      for (var i = 0; i < n; i++)
+        for (var r = 0; r < 2; r++)
+          if ((i + r) % 2 === 0)
+            out.push([pad + i * sq, d0 + r * sq, pad + (i + 1) * sq, d0 + (r + 1) * sq]);
+    }
+
+    if (p.decal === 'text' || p.decal === 'both') {
+      var txt = String(p.decalText || '').toUpperCase().split('')
+                  .filter(function (c) { return FONT[c]; });
+      if (!txt.length) return out;
+      var lo = p.decal === 'both' ? B * 0.36 : B * 0.28, hi = B * 0.80;
+      // fit the block to whichever runs out first, the flank or the length
+      var px = Math.min((hi - lo) / 7, (L * 0.86) / (txt.length * 6 - 1));
+      var w = (txt.length * 6 - 1) * px, x0 = (L - w) / 2;
+      var y0 = lo + ((hi - lo) - 7 * px) / 2;
+      txt.forEach(function (ch, k) {
+        var rows = FONT[ch];
+        for (var r = 0; r < 7; r++) {
+          var run = -1;
+          for (var c = 0; c <= 5; c++) {
+            var on = c < 5 && rows[6 - r].charAt(c) === '#';
+            if (on && run < 0) run = c;
+            if (!on && run >= 0) {                       // merge a row of pixels
+              out.push([x0 + (k * 6 + run) * px, y0 + r * px,
+                        x0 + (k * 6 + c) * px,   y0 + (r + 1) * px]);
+              run = -1;
+            }
+          }
+        }
+      });
+    }
+    // Checker squares, and diagonal strokes in letters like X and Z, touch
+    // corner to corner. That is a non-manifold vertex, so grow every block a
+    // hair: diagonal neighbours then overlap along a real edge instead.
+    // Growing in x alone is enough: a diagonal neighbour then shares a real
+    // edge segment rather than a point. Growing in d as well would leave a
+    // 2e-wide sliver between stacked pixels of the same stroke.
+    var e = 0.15;
+    out = out.map(function (r) { return [r[0] - e, r[1], r[2] + e, r[3]]; });
+
+    // Keep decals out of the joint zone -- the seam itself and the dovetail
+    // reach either side of it. Two reasons. Relief on a tab or in a socket
+    // fouls the fit; and a block crossing the tile's plan boundary steps the
+    // side wall by the relief at a single point, which is a T-junction. The
+    // tiles are separate prints with clearance anyway, so a letter spanning a
+    // joint would read as broken however it was meshed.
+    var t = tiling(p), pad = p.tabDepth + 1.5, cutX = [], cutD = [], i;
+    for (i = 1; i < t.nx; i++) cutX.push(i * t.px);
+    for (i = 1; i < t.ny; i++) { cutD.push(i * t.py); cutD.push(p.hillWidth - i * t.py); }
+    return trimRects(trimRects(out, cutX, 0, pad), cutD, 1, pad);
+  }
+
+  // Cut rectangles clear of each seam, dropping slivers.
+  function trimRects(rects, cuts, axis, gap) {
+    if (!cuts.length) return rects;
+    var lo = axis ? 1 : 0, hi = axis ? 3 : 2, out = [];
+    rects.forEach(function (r) {
+      var parts = [r];
+      cuts.forEach(function (c) {
+        var next = [];
+        parts.forEach(function (q) {
+          if (q[hi] <= c - gap || q[lo] >= c + gap) { next.push(q); return; }
+          if (q[lo] < c - gap) { var a = q.slice(); a[hi] = c - gap; next.push(a); }
+          if (q[hi] > c + gap) { var b = q.slice(); b[lo] = c + gap; next.push(b); }
+        });
+        parts = next;
+      });
+      parts.forEach(function (q) { if (q[hi] - q[lo] > 0.4) out.push(q); });
+    });
+    return out;
+  }
+
+  // Height added to the flank at (x,y). Zero everywhere else.
+  function reliefAt(p, x, y) {
+    var rects = p._decal;
+    if (!rects || !rects.length) return 0;
+    var d = Math.min(y, p.hillWidth - y);
+    for (var i = 0; i < rects.length; i++) {
+      var r = rects[i];
+      if (x >= r[0] && x <= r[2] && d >= r[1] && d <= r[3]) return p.decalRelief;
+    }
+    return 0;
+  }
+
   // -------------------------------------------------------------- profile ---
   // Three lengthwise profiles. 'roller' comes back down to the ground; 'drop'
   // and 'kicker' both finish at full height, so the far end of the last tile is
@@ -487,7 +639,10 @@ input[type=range]::-moz-range-thumb {
     var t = Math.min(1, Math.max(0, Math.min(y, p.hillWidth - y) / p.bevelRun));
     return p.edgeLip + (p.hillHeight - p.edgeLip) * t;
   }
-  function hAt(p, x, y) { return Math.min(profX(p, x), profY(p, y)); }
+  function flankAt(p, x, y) { return profY(p, y) + reliefAt(p, x, y); }
+  function hAt(p, x, y) { return Math.min(profX(p, x), flankAt(p, x, y)); }
+  // Surface height for a piece that carries one relief value throughout.
+  function topOf(p, rel, x, y) { return Math.min(profX(p, x), profY(p, y) + rel); }
 
   // Steepest gradient the rider meets. For a kicker that is the lip, i.e. the
   // takeoff angle; for a drop it is the approach, not the edge itself.
@@ -705,8 +860,8 @@ input[type=range]::-moz-range-thumb {
   // The cut point on a shared edge is interpolated from that edge's endpoints
   // alone, so the neighbouring cell computes an identical point and the surface
   // stays closed.
-  function splitAtCrease(p, poly) {
-    var g = poly.map(function (q) { return profX(p, q[0]) - profY(p, q[1]); });
+  function splitAtCrease(p, poly, rel) {
+    var g = poly.map(function (q) { return profX(p, q[0]) - (profY(p, q[1]) + rel); });
     var pos = false, neg = false, i, j;
     for (i = 0; i < g.length; i++) {
       if (g[i] > 0) pos = true;
@@ -734,6 +889,22 @@ input[type=range]::-moz-range-thumb {
     if (Math.abs(Math.abs(area(A)) + Math.abs(area(B)) - ar) > 1e-6 * (ar + 1))
       return null;
     return [A, B];
+  }
+
+  // A vertex landing exactly on a cut line gets emitted by both the clip and
+  // the split, leaving a repeated point that fans out into a zero-area
+  // triangle. Harmless to a slicer, but it puts four faces on an edge and makes
+  // the mesh non-manifold, so drop repeats before building anything.
+  function dedupe(poly) {
+    var Q = 1e4, out = [], i;
+    var same = function (a, b) {
+      return Math.round(a[0] * Q) === Math.round(b[0] * Q) &&
+             Math.round(a[1] * Q) === Math.round(b[1] * Q);
+    };
+    for (i = 0; i < poly.length; i++)
+      if (!out.length || !same(out[out.length - 1], poly[i])) out.push(poly[i]);
+    while (out.length > 1 && same(out[0], out[out.length - 1])) out.pop();
+    return out;
   }
 
   function area(poly) {
@@ -786,10 +957,16 @@ input[type=range]::-moz-range-thumb {
     });
     // and on the kinks in the profiles themselves
     if (p.bevelRun > 0) { cy.push(p.bevelRun); cy.push(p.hillWidth - p.bevelRun); }
+    // decal blocks are axis-aligned, so a line on each edge makes them crisp
+    if (p._decal) p._decal.forEach(function (r) {
+      cx.push(r[0], r[2]);
+      cy.push(r[1], r[3], p.hillWidth - r[1], p.hillWidth - r[3]);
+    });
     if (p.shape === 'drop')
       cx.push(p.hillLength - Math.min(p.deck, p.hillLength * 0.8));
     var xs = gridLines(bx0, bx1, cx, p.cell);
     var ys = gridLines(by0, by1, cy, p.cell);
+    var levels = (p._decal && p._decal.length) ? [0, p.decalRelief] : [0];
 
     var pieces = [];
     for (var a = 0; a < xs.length - 1; a++) {
@@ -829,12 +1006,30 @@ input[type=range]::-moz-range-thumb {
           break;
         }
 
+        // Grid lines sit on every decal edge, so a cell is wholly in or out of
+        // each block and its centre settles the relief for the whole piece.
+        var rel = reliefAt(p, mx, my);
+        // Split at the fold for *every* relief level in play, not just this
+        // cell's. Near the toes the fold runs through the decal bands, and if
+        // each cell split only at its own fold two neighbours would cut their
+        // shared edge in different places and tear the mesh open.
         var push = function (q, fl) {
           if (q.length < 3) return;
-          var halves = splitAtCrease(p, q);
-          if (!halves) { pieces.push({ poly: q, floor: fl }); return; }
-          if (halves[0].length >= 3) pieces.push({ poly: halves[0], floor: fl });
-          if (halves[1].length >= 3) pieces.push({ poly: halves[1], floor: fl });
+          var work = [q];
+          levels.forEach(function (lv) {
+            var next = [];
+            work.forEach(function (w) {
+              var halves = splitAtCrease(p, w, lv);
+              if (!halves) { next.push(w); return; }
+              if (halves[0].length >= 3) next.push(halves[0]);
+              if (halves[1].length >= 3) next.push(halves[1]);
+            });
+            work = next;
+          });
+          work.forEach(function (w) {
+            var c = dedupe(w);
+            if (c.length >= 3) pieces.push({ poly: c, floor: fl, rel: rel });
+          });
         };
 
         if (split) {
@@ -855,7 +1050,17 @@ input[type=range]::-moz-range-thumb {
     var tris = [], edges = new Map(), Q = 1e4;
     var key = function (x, y) { return Math.round(x * Q) + ':' + Math.round(y * Q); };
 
+    // A triangle with a repeated vertex -- a fan over a duplicated point, a wall
+    // whose two heights coincide -- carries an edge and its reverse, so it
+    // cancels against itself and can be dropped. Test for that, not for small
+    // area: a genuinely thin sliver has three live edges, and deleting it tears
+    // a hole in the surface.
     function tri(ax, ay, az, bx, by, bz, cx2, cy2, cz) {
+      var q = function (v) { return Math.round(v * 1e4); };
+      var A = q(ax) + ',' + q(ay) + ',' + q(az);
+      var Bv = q(bx) + ',' + q(by) + ',' + q(bz);
+      var C = q(cx2) + ',' + q(cy2) + ',' + q(cz);
+      if (A === Bv || Bv === C || C === A) return;
       tris.push(ax, ay, az, bx, by, bz, cx2, cy2, cz);
     }
     // Vertical quad along a->b. Interior lies left of a->b, so this faces out.
@@ -908,8 +1113,8 @@ input[type=range]::-moz-range-thumb {
     }
 
     pieces.forEach(function (pc) {
-      var poly = pc.poly, f = pc.floor, n = poly.length, i;
-      var h = poly.map(function (q) { return hAt(p, q[0], q[1]); });
+      var poly = pc.poly, f = pc.floor, rel = pc.rel || 0, n = poly.length, i;
+      var h = poly.map(function (q) { return topOf(p, rel, q[0], q[1]); });
       for (i = 1; i < n - 1; i++) {
         tri(poly[0][0], poly[0][1], h[0],
             poly[i][0], poly[i][1], h[i],
@@ -926,20 +1131,27 @@ input[type=range]::-moz-range-thumb {
         if (edges.has(rev)) {
           var o = edges.get(rev);
           edges.delete(rev);
-          if (Math.abs(o.f - f) > 1e-6) {          // socket wall
+          if (Math.abs(o.f - f) > 1e-9) {          // socket wall
             var lo = f < o.f ? { a: a, b: b, f: f } : { a: o.a, b: o.b, f: o.f };
             var top = Math.max(f, o.f);
             var pk = pocketOn(lo.a, lo.b);
             if (pk) threadWall(pk, lo.a, lo.b, lo.f, top);
             else wall(lo.a, lo.b, lo.f, lo.f, top, top);
           }
-        } else edges.set(ka + '|' + kb, { a: a, b: b, f: f });
+          if (Math.abs(o.rel - rel) > 1e-9) {      // decal step, at the surface
+            var hi = rel > o.rel ? { a: a, b: b, r: rel } : { a: o.a, b: o.b, r: o.rel };
+            var lr = Math.min(rel, o.rel);
+            wall(hi.a, hi.b,
+                 topOf(p, lr, hi.a[0], hi.a[1]), topOf(p, lr, hi.b[0], hi.b[1]),
+                 topOf(p, hi.r, hi.a[0], hi.a[1]), topOf(p, hi.r, hi.b[0], hi.b[1]));
+          }
+        } else edges.set(ka + '|' + kb, { a: a, b: b, f: f, rel: rel });
       }
     });
 
     edges.forEach(function (e) {
-      var a = e.a, b = e.b;
-      wall(a, b, e.f, e.f, hAt(p, a[0], a[1]), hAt(p, b[0], b[1]));
+      var a = e.a, b = e.b, r = e.rel || 0;
+      wall(a, b, e.f, e.f, topOf(p, r, a[0], a[1]), topOf(p, r, b[0], b[1]));
     });
     return tris;
   }
@@ -1141,6 +1353,7 @@ input[type=range]::-moz-range-thumb {
       if (q.bedX == null) p.bedX = q.maxPrint;
       if (q.bedY == null) p.bedY = q.maxPrint;
     }
+    p._decal = decalRects(p);
     p.cell = meshCell(p);
     var t = tiling(p);
     var tiles = [], total = { volume: 0, areaUp: 0, areaDown: 0, areaSide: 0 };
@@ -1183,6 +1396,7 @@ input[type=range]::-moz-range-thumb {
               stlBinary: stlBinary, zip: zip,
               SPIKE: SPIKE, spikeSpots: spikeSpots, spikeMesh: spikeMesh,
               socketRadius: socketRadius, spikeRadius: spikeRadius,
+              decalRects: decalRects, reliefAt: reliefAt,
               threadCrest: threadCrest,
               xseamTabs: xseamTabs, yseamTabs: yseamTabs };
 
@@ -1190,7 +1404,7 @@ input[type=range]::-moz-range-thumb {
   else root.BikeRamp = api;
 })(this);
 </script>
-<script>window.SCAD_SOURCE = "// ============================================================================\n//  bikeramp.scad  --  printable coasting hill for a toddler balance bike\n//\n//  Generates a smooth cosine \"roller\" hill, auto-split into bed-sized tiles\n//  that lock together with drop-in dovetails.\n//\n//  Render one tile:   openscad -D 'part=\"tile\"' -D tile_i=0 -D tile_j=0 -o t.stl bikeramp.scad\n//  Preview the hill:  openscad -D 'part=\"hill\"' bikeramp.scad\n//  See ./render.sh for batch export.\n// ============================================================================\n\n/* [Hill] */\nshape       = \"roller\";  // \"roller\" = up and back down\n                         // \"drop\"   = rise, flat deck, then a vertical step off\n                         // \"kicker\" = curved launch, steepest at the lip\ndeck        = 150;   // drop only: flat run before the edge (mm)\nhill_length = 600;   // total run, front toe to back toe (mm)\nhill_width  = 300;   // riding width (mm)\nhill_height = 45;    // crest height (mm)\nhumps       = 1;     // 1 = single hill, 2 = camel back, ...\nbevel_run   = 90;    // side taper: outer this-many mm slope down to the floor. 0 = vertical sides\nedge_lip    = 1.2;   // thickness at the very edges. Keeps the toe printable instead of a 0mm feather\n\n/* [Printer] */\nbed_x       = 250;   // usable bed along the run.   X1C is 256; 250 leaves margin\nbed_y       = 250;   // usable bed across the width. A MK4 would be 244 x 204\n\n/* [Joints] */\ntab_depth   = 12;\ntab_neck    = 18;    // width where the dovetail meets the tile (narrow)\ntab_tip     = 26;    // width at the tip (wide -> locks)\nfit         = 0.35;  // clearance cut into the matching socket, per side\nmin_tab_h   = 10;    // skip dovetails where the hill is shorter than this\n\n/* [Ground spikes] */\nspike_len     = 0;    // spike protrusion below the tile, mm. 0 = no sockets at all\nsocket_depth  = 11;\nsocket_roof   = 5;    // material left between socket ceiling and riding surface\nsocket_gon    = 24;\nspike_clear   = 0.25; // radial clearance, spike to socket\nthread_lead   = 1.5;  // plain bore at the mouth, to start the screw\nthread_relief = 1.5;  // plain bore at the far end, so the ceiling closes flat\nspike_inset   = 30;   // keep sockets clear of tile edges and their dovetails\nspike_scan    = 10;   // grid the tile is searched on for its thickest point\nspike_minor   = 6.5;  // thread core radius\nspike_major   = 7.45; // thread crest radius\nspike_pitch   = 3.0;\nspike_stud    = 10;\nspike_chamfer = 1.5;\nspike_flange_r= 9.0;  // hex flange, circumradius. Grip it to screw the spike in\nspike_flange_h= 1.5;\nspike_cone_r  = 7.5;\nspike_tip_r   = 0.6;\n\n/* [Grip] */\ngrip_depth  = 0;     // 0 = smooth. 0.6 gives shallow traction grooves\ngrip_pitch  = 14;\ngrip_width  = 4;\n\n/* [Output] */\npart   = \"tile\";     // \"tile\" | \"hill\" | \"mono\" | \"spike\"\ntile_i = 0;          // tile index along the run\ntile_j = 0;          // tile index across the width\n\n/* [Hidden] */\n$fn = 32;\nSTEPS = 160;         // profile resolution\nBIG   = 1000;\n\n// ---------------------------------------------------------------- tiling ----\n// Tiles carry a dovetail past their nominal pitch, so the printable span is the\n// bed less one tab. Beds are often oblong, so lay the grid out both ways round\n// and keep whichever needs fewer plates.\nbx = max(1, bed_x - tab_depth);\nby = max(1, bed_y - tab_depth);\nnx_a = max(1, ceil(hill_length / bx));  ny_a = max(1, ceil(hill_width / by));\nnx_b = max(1, ceil(hill_length / by));  ny_b = max(1, ceil(hill_width / bx));\nturned = nx_b * ny_b < nx_a * ny_a;\n\nnx = turned ? nx_b : nx_a;\nny = turned ? ny_b : ny_a;\npx = hill_length / nx;   // tile pitch along the run\npy = hill_width  / ny;   // tile pitch across the width\n\n// ---------------------------------------------------------------- profile ---\n// Three lengthwise profiles. \"roller\" returns to the ground; \"drop\" and\n// \"kicker\" both finish at full height, so the far end is a vertical face.\nfunction prof_x(x) =\n    let (h = hill_height - edge_lip, L = hill_length)\n    shape == \"drop\"\n      ? let (rise = max(1, L - min(deck, L * 0.8)))\n        (x >= rise ? hill_height\n                   : edge_lip + h * 0.5 * (1 - cos(180 * min(1, max(0, x / rise)))))\n  : shape == \"kicker\"\n      ? (h < 0.01 ? edge_lip\n         : let (R = (L * L + h * h) / (2 * h), xx = min(max(x, 0), L))\n           edge_lip + R - sqrt(max(0, R * R - xx * xx)))\n  : edge_lip + h / 2 * (1 - cos(360 * humps * x / L));\n\n// Steepest gradient the rider meets: the lip on a kicker, the approach on a drop.\nfunction max_slope() =\n    let (h = hill_height - edge_lip, L = hill_length)\n    shape == \"drop\"   ? atan(PI * h / (2 * max(1, L - min(deck, L * 0.8))))\n  : shape == \"kicker\" ? (h < 0.01 ? 0\n                         : let (R = (L * L + h * h) / (2 * h))\n                           atan(L / max(1e-9, R - h)))\n  : atan(PI * humps * h / L);\n\n// Crosswise: flat in the middle, tapering to the floor over bevel_run.\nfunction prof_y(y) =\n    bevel_run <= 0\n      ? hill_height\n      : edge_lip + (hill_height - edge_lip)\n          * min(1, max(0, min(y, hill_width - y) / bevel_run));\n\nfunction h_at(x, y) = min(prof_x(x), prof_y(y));\n\n// ------------------------------------------------------------ hill solid ----\nmodule hill_solid() {\n    intersection() {\n        // lengthwise profile, swept across the width\n        translate([0, hill_width + BIG, 0])\n            rotate([90, 0, 0])\n                linear_extrude(hill_width + 2 * BIG)\n                    polygon(concat(\n                        [[0, 0]],\n                        [for (i = [0 : STEPS])\n                            let (x = i * hill_length / STEPS) [x, prof_x(x)]],\n                        [[hill_length, 0]]\n                    ));\n\n        // crosswise profile, swept along the run\n        translate([-BIG, 0, 0])\n            rotate([0, 0, 90]) rotate([90, 0, 0])\n                linear_extrude(hill_length + 2 * BIG)\n                    polygon(concat(\n                        [[0, 0]],\n                        [for (i = [0 : STEPS])\n                            let (y = i * hill_width / STEPS) [y, prof_y(y)]],\n                        [[hill_width, 0]]\n                    ));\n    }\n}\n\n// --------------------------------------------------------------- dovetail ---\n// 2D dovetail pointing +X, root centred on the origin.\nmodule dovetail_2d(grow = 0) {\n    offset(delta = grow)\n        polygon([[0, -tab_neck / 2],\n                 [tab_depth,  -tab_tip / 2],\n                 [tab_depth,   tab_tip / 2],\n                 [0,  tab_neck / 2]]);\n}\n\n// How many dovetails fit on a seam of the given span, and where.\nfunction n_tabs(span) = max(1, round(span / 120));\nfunction tab_pos(span, k) = (k + 0.5) * span / n_tabs(span);\n\n// Seam at constant x = xs, running in y from y0 to y0+span.\n// Only keep tabs where there is enough material to make them worthwhile.\nfunction xseam_tabs(xs, y0, span) =\n    [for (k = [0 : n_tabs(span) - 1])\n        let (p = y0 + tab_pos(span, k))\n        if (h_at(xs, p) >= min_tab_h) p];\n\n// Seam at constant y = ys, running in x from x0 to x0+span.\nfunction yseam_tabs(ys, x0, span) =\n    [for (k = [0 : n_tabs(span) - 1])\n        let (p = x0 + tab_pos(span, k))\n        if (h_at(p, ys) >= min_tab_h) p];\n\n// ------------------------------------------------------- tile footprint -----\n// Plan-view outline of tile (i,j): the rectangle, plus dovetails on its +X and\n// +Y seams, minus sockets on its -X and -Y seams. Neighbours therefore always\n// agree, and every tile still drops straight down into place.\nmodule tile_footprint(i, j) {\n    x0 = i * px;  x1 = (i + 1) * px;\n    y0 = j * py;  y1 = (j + 1) * py;\n\n    difference() {\n        union() {\n            square([px, py]);\n\n            if (i < nx - 1)\n                for (p = xseam_tabs(x1, y0, py))\n                    translate([px, p - y0]) dovetail_2d();\n\n            if (j < ny - 1)\n                for (p = yseam_tabs(y1, x0, px))\n                    translate([p - x0, py]) rotate(90) dovetail_2d();\n        }\n\n        if (i > 0)\n            for (p = xseam_tabs(x0, y0, py))\n                translate([0, p - y0]) dovetail_2d(fit);\n\n        if (j > 0)\n            for (p = yseam_tabs(y0, x0, px))\n                translate([p - x0, 0]) rotate(90) dovetail_2d(fit);\n    }\n}\n\nmodule tile_prism(i, j, inset = 0) {\n    translate([i * px, j * py, -BIG / 2])\n        linear_extrude(BIG)\n            offset(delta = -inset)\n                tile_footprint(i, j);\n}\n\n// --------------------------------------------------------- spike sockets ----\n// One socket per tile, at the thickest point of the area that clears the tile\n// edges and their dovetails. Tiles too thin to swallow one simply get none.\nfunction spike_cands(i, j) =\n    let (x0 = i * px + spike_inset, x1 = (i + 1) * px - spike_inset,\n         y0 = j * py + spike_inset, y1 = (j + 1) * py - spike_inset)\n    (x1 < x0 || y1 < y0) ? []\n    : [for (a = [0 : floor((x1 - x0) / spike_scan)],\n            b = [0 : floor((y1 - y0) / spike_scan)])\n         let (x = x0 + a * spike_scan, y = y0 + b * spike_scan) [x, y, h_at(x, y)]];\n\nfunction spike_spot(i, j) =\n    let (c = spike_cands(i, j))\n    len(c) == 0 ? []\n    : let (best = max([for (q = c) q[2]]))\n      best < socket_depth + socket_roof ? []\n      : [ [for (q = c) if (q[2] >= best - 1e-9) [q[0], q[1]]][0] ];\n\n// The socket carries the spike's own thread form, pushed out by the clearance,\n// so the two mate at every point. Plain bore at both ends: a lead-in to start\n// the screw, and a relief so the ceiling closes flat.\nsocket_crest_r = spike_minor + spike_clear;   // bore at its tightest\nsocket_r       = spike_major + spike_clear;   // groove, and the plain bore\n\nfunction socket_profile(n) =\n    [for (k = [0 : n - 1])\n        let (a = 360 * k / n, u = k / n, t = 1 - abs(2 * u - 1),\n             r = socket_crest_r + (socket_r - socket_crest_r) * t)\n        [r * cos(a), r * sin(a)]];\n\nmodule socket_bore() {\n    th = socket_depth - thread_lead - thread_relief;\n    union() {\n        translate([0, 0, -1])\n            cylinder(h = thread_lead + 1, r = socket_r, $fn = socket_gon);\n        translate([0, 0, thread_lead])\n            linear_extrude(height = th, twist = -360 * th / spike_pitch,\n                           slices = ceil(th * 12), convexity = 8)\n                polygon(socket_profile(socket_gon));\n        translate([0, 0, socket_depth - thread_relief])\n            cylinder(h = thread_relief, r = socket_r, $fn = socket_gon);\n    }\n}\n\nmodule spike_sockets(i, j) {\n    if (spike_len > 0)\n        for (q = spike_spot(i, j))\n            translate([q[0], q[1], 0]) socket_bore();\n}\n\n// The spike itself. Printed stud-down, tapering upward, so nothing overhangs.\n// Its coarse thread forms its own groove in the plain socket and backs out again.\nfunction thread_profile(n = 72) =\n    [for (k = [0 : n - 1])\n        let (a = 360 * k / n, u = k / n, t = 1 - abs(2 * u - 1),\n             r = spike_minor + (spike_major - spike_minor) * t)\n        [r * cos(a), r * sin(a)]];\n\nmodule spike_part() {\n    zf = spike_stud + spike_chamfer;\n    zt = zf + spike_flange_h;\n    union() {\n        linear_extrude(height = spike_stud, twist = -360 * spike_stud / spike_pitch,\n                       slices = ceil(spike_stud * 8), convexity = 8)\n            polygon(thread_profile());\n        translate([0, 0, spike_stud])\n            cylinder(h = spike_chamfer, r1 = spike_major, r2 = spike_flange_r, $fn = 6);\n        translate([0, 0, zf]) cylinder(h = spike_flange_h, r = spike_flange_r, $fn = 6);\n        translate([0, 0, zt])\n            cylinder(h = max(0.1, spike_len), r1 = spike_cone_r, r2 = spike_tip_r, $fn = 48);\n    }\n}\n\n// ------------------------------------------------------------ grip combs ----\nmodule grip_cut() {\n    if (grip_depth > 0)\n        intersection() {\n            difference() {\n                hill_solid();\n                translate([0, 0, -grip_depth]) hill_solid();\n            }\n            for (x = [grip_pitch : grip_pitch : hill_length - grip_pitch])\n                translate([x - grip_width / 2, -BIG / 2, -BIG / 2])\n                    cube([grip_width, BIG, BIG]);\n        }\n}\n\n// ----------------------------------------------------------------- tiles ----\nmodule tile_solid(i, j) {\n    difference() {\n        intersection() { hill_solid(); tile_prism(i, j); }\n        grip_cut();\n        spike_sockets(i, j);\n    }\n}\n\nmodule tile(i, j) {\n    translate([-i * px, -j * py, 0])       // drop it on the origin for printing\n        tile_solid(i, j);\n}\n\n// ------------------------------------------------------------------ main ----\nif (part == \"hill\")\n    for (i = [0 : nx - 1], j = [0 : ny - 1])\n        translate([i * px, j * py, 0]) tile(i, j);\nelse if (part == \"spike\")\n    spike_part();\nelse if (part == \"mono\")          // uncut hill, for checking the joints\n    difference() { hill_solid(); grip_cut(); }\nelse\n    tile(tile_i, tile_j);\n\necho(str(\"tiles: \", nx, \" x \", ny, \" = \", nx * ny,\n         \"   pitch \", px, \" x \", py,\n         \"   printed extent up to \", px + tab_depth, \" x \", py + tab_depth,\n         \"   \", shape, \" max slope \", max_slope(), \" deg\"));\n";</script>
+<script>window.SCAD_SOURCE = "// ============================================================================\n//  bikeramp.scad  --  printable coasting hill for a toddler balance bike\n//\n//  Generates a smooth cosine \"roller\" hill, auto-split into bed-sized tiles\n//  that lock together with drop-in dovetails.\n//\n//  Render one tile:   openscad -D 'part=\"tile\"' -D tile_i=0 -D tile_j=0 -o t.stl bikeramp.scad\n//  Preview the hill:  openscad -D 'part=\"hill\"' bikeramp.scad\n//  See ./render.sh for batch export.\n// ============================================================================\n\n/* [Hill] */\nshape       = \"roller\";  // \"roller\" = up and back down\n                         // \"drop\"   = rise, flat deck, then a vertical step off\n                         // \"kicker\" = curved launch, steepest at the lip\ndeck        = 150;   // drop only: flat run before the edge (mm)\nhill_length = 600;   // total run, front toe to back toe (mm)\nhill_width  = 300;   // riding width (mm)\nhill_height = 45;    // crest height (mm)\nhumps       = 1;     // 1 = single hill, 2 = camel back, ...\nbevel_run   = 90;    // side taper: outer this-many mm slope down to the floor. 0 = vertical sides\nedge_lip    = 1.2;   // thickness at the very edges. Keeps the toe printable instead of a 0mm feather\n\n/* [Printer] */\nbed_x       = 250;   // usable bed along the run.   X1C is 256; 250 leaves margin\nbed_y       = 250;   // usable bed across the width. A MK4 would be 244 x 204\n\n/* [Joints] */\ntab_depth   = 12;\ntab_neck    = 18;    // width where the dovetail meets the tile (narrow)\ntab_tip     = 26;    // width at the tip (wide -> locks)\nfit         = 0.35;  // clearance cut into the matching socket, per side\nmin_tab_h   = 10;    // skip dovetails where the hill is shorter than this\n\n/* [Ground spikes] */\nspike_len     = 0;    // spike protrusion below the tile, mm. 0 = no sockets at all\nsocket_depth  = 11;\nsocket_roof   = 5;    // material left between socket ceiling and riding surface\nsocket_gon    = 24;\nspike_clear   = 0.25; // radial clearance, spike to socket\nthread_lead   = 1.5;  // plain bore at the mouth, to start the screw\nthread_relief = 1.5;  // plain bore at the far end, so the ceiling closes flat\nspike_inset   = 30;   // keep sockets clear of tile edges and their dovetails\nspike_scan    = 10;   // grid the tile is searched on for its thickest point\nspike_minor   = 6.5;  // thread core radius\nspike_major   = 7.45; // thread crest radius\nspike_pitch   = 3.0;\nspike_stud    = 10;\nspike_chamfer = 1.5;\nspike_flange_r= 9.0;  // hex flange, circumradius. Grip it to screw the spike in\nspike_flange_h= 1.5;\nspike_cone_r  = 7.5;\nspike_tip_r   = 0.6;\n\n/* [Decals] */\ndecal        = \"none\";  // \"none\" | \"text\" | \"checker\" | \"both\"\ndecal_text   = \"LITTLE RIPPER\";\ndecal_relief = 1.2;     // how far the decal stands proud of the flank (mm)\n\n/* [Grip] */\ngrip_depth  = 0;     // 0 = smooth. 0.6 gives shallow traction grooves\ngrip_pitch  = 14;\ngrip_width  = 4;\n\n/* [Output] */\npart   = \"tile\";     // \"tile\" | \"hill\" | \"mono\" | \"spike\"\ntile_i = 0;          // tile index along the run\ntile_j = 0;          // tile index across the width\n\n/* [Hidden] */\n$fn = 32;\nSTEPS = 160;         // profile resolution\nBIG   = 1000;\n\n// ---------------------------------------------------------------- tiling ----\n// Tiles carry a dovetail past their nominal pitch, so the printable span is the\n// bed less one tab. Beds are often oblong, so lay the grid out both ways round\n// and keep whichever needs fewer plates.\nbx = max(1, bed_x - tab_depth);\nby = max(1, bed_y - tab_depth);\nnx_a = max(1, ceil(hill_length / bx));  ny_a = max(1, ceil(hill_width / by));\nnx_b = max(1, ceil(hill_length / by));  ny_b = max(1, ceil(hill_width / bx));\nturned = nx_b * ny_b < nx_a * ny_a;\n\nnx = turned ? nx_b : nx_a;\nny = turned ? ny_b : ny_a;\npx = hill_length / nx;   // tile pitch along the run\npy = hill_width  / ny;   // tile pitch across the width\n\n// ---------------------------------------------------------------- profile ---\n// Three lengthwise profiles. \"roller\" returns to the ground; \"drop\" and\n// \"kicker\" both finish at full height, so the far end is a vertical face.\nfunction prof_x(x) =\n    let (h = hill_height - edge_lip, L = hill_length)\n    shape == \"drop\"\n      ? let (rise = max(1, L - min(deck, L * 0.8)))\n        (x >= rise ? hill_height\n                   : edge_lip + h * 0.5 * (1 - cos(180 * min(1, max(0, x / rise)))))\n  : shape == \"kicker\"\n      ? (h < 0.01 ? edge_lip\n         : let (R = (L * L + h * h) / (2 * h), xx = min(max(x, 0), L))\n           edge_lip + R - sqrt(max(0, R * R - xx * xx)))\n  : edge_lip + h / 2 * (1 - cos(360 * humps * x / L));\n\n// Steepest gradient the rider meets: the lip on a kicker, the approach on a drop.\nfunction max_slope() =\n    let (h = hill_height - edge_lip, L = hill_length)\n    shape == \"drop\"   ? atan(PI * h / (2 * max(1, L - min(deck, L * 0.8))))\n  : shape == \"kicker\" ? (h < 0.01 ? 0\n                         : let (R = (L * L + h * h) / (2 * h))\n                           atan(L / max(1e-9, R - h)))\n  : atan(PI * humps * h / L);\n\n// Crosswise: flat in the middle, tapering to the floor over bevel_run.\nfunction prof_y(y) =\n    bevel_run <= 0\n      ? hill_height\n      : edge_lip + (hill_height - edge_lip)\n          * min(1, max(0, min(y, hill_width - y) / bevel_run));\n\nfunction h_at(x, y) = min(prof_x(x), prof_y(y));\n\n// ------------------------------------------------------------ hill solid ----\n// The lengthwise sweep is floored at z=0, so it alone bounds the solid below.\n// The crosswise sweep runs well below zero, which lets it be raised by the\n// decal relief without lifting the underside off the bed.\nmodule sweep_x() {\n    translate([0, hill_width + BIG, 0])\n        rotate([90, 0, 0])\n            linear_extrude(hill_width + 2 * BIG)\n                polygon(concat(\n                    [[0, 0]],\n                    [for (i = [0 : STEPS])\n                        let (x = i * hill_length / STEPS) [x, prof_x(x)]],\n                    [[hill_length, 0]]\n                ));\n}\nmodule sweep_y() {\n    translate([-BIG, 0, 0])\n        rotate([0, 0, 90]) rotate([90, 0, 0])\n            linear_extrude(hill_length + 2 * BIG)\n                polygon(concat(\n                    [[0, -BIG]],\n                    [for (i = [0 : STEPS])\n                        let (y = i * hill_width / STEPS) [y, prof_y(y)]],\n                    [[hill_width, -BIG]]\n                ));\n}\n\nmodule hill_solid() {\n    if (decal == \"none\" || bevel_run <= 0 || len(decal_rects()) == 0) {\n        intersection() { sweep_x(); sweep_y(); }\n    } else {\n        // h = min(prof_x, prof_y + relief) inside the decal blocks, h unchanged\n        // outside -- so union the plain hill with the raised hill clipped to\n        // the blocks. The min() is what keeps a decal from ever standing above\n        // the riding surface.\n        union() {\n            intersection() { sweep_x(); sweep_y(); }\n            intersection() {\n                sweep_x();\n                translate([0, 0, decal_relief]) sweep_y();\n                decal_prisms();\n            }\n        }\n    }\n}\n\n// --------------------------------------------------------------- decals -----\n// A blocky 5x7 stencil: every edge is axis-aligned, which keeps the letters\n// crisp and matches the mesh generator block for block.\nDECAL_KEYS = \"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 -.'!\";\nDECAL_FONT = [\n    [\".###.\",\"#...#\",\"#...#\",\"#####\",\"#...#\",\"#...#\",\"#...#\"],\n    [\"####.\",\"#...#\",\"####.\",\"#...#\",\"#...#\",\"#...#\",\"####.\"],\n    [\".####\",\"#....\",\"#....\",\"#....\",\"#....\",\"#....\",\".####\"],\n    [\"####.\",\"#...#\",\"#...#\",\"#...#\",\"#...#\",\"#...#\",\"####.\"],\n    [\"#####\",\"#....\",\"####.\",\"#....\",\"#....\",\"#....\",\"#####\"],\n    [\"#####\",\"#....\",\"####.\",\"#....\",\"#....\",\"#....\",\"#....\"],\n    [\".####\",\"#....\",\"#....\",\"#..##\",\"#...#\",\"#...#\",\".####\"],\n    [\"#...#\",\"#...#\",\"#####\",\"#...#\",\"#...#\",\"#...#\",\"#...#\"],\n    [\"#####\",\"..#..\",\"..#..\",\"..#..\",\"..#..\",\"..#..\",\"#####\"],\n    [\"####.\",\"...#.\",\"...#.\",\"...#.\",\"...#.\",\"#..#.\",\".##..\"],\n    [\"#...#\",\"#..#.\",\"##...\",\"##...\",\"#.#..\",\"#..#.\",\"#...#\"],\n    [\"#....\",\"#....\",\"#....\",\"#....\",\"#....\",\"#....\",\"#####\"],\n    [\"#...#\",\"##.##\",\"#.#.#\",\"#...#\",\"#...#\",\"#...#\",\"#...#\"],\n    [\"#...#\",\"##..#\",\"#.#.#\",\"#..##\",\"#...#\",\"#...#\",\"#...#\"],\n    [\".###.\",\"#...#\",\"#...#\",\"#...#\",\"#...#\",\"#...#\",\".###.\"],\n    [\"####.\",\"#...#\",\"#...#\",\"####.\",\"#....\",\"#....\",\"#....\"],\n    [\".###.\",\"#...#\",\"#...#\",\"#...#\",\"#.#.#\",\"#..#.\",\".##.#\"],\n    [\"####.\",\"#...#\",\"#...#\",\"####.\",\"#.#..\",\"#..#.\",\"#...#\"],\n    [\".####\",\"#....\",\"#....\",\".###.\",\"....#\",\"....#\",\"####.\"],\n    [\"#####\",\"..#..\",\"..#..\",\"..#..\",\"..#..\",\"..#..\",\"..#..\"],\n    [\"#...#\",\"#...#\",\"#...#\",\"#...#\",\"#...#\",\"#...#\",\".###.\"],\n    [\"#...#\",\"#...#\",\"#...#\",\"#...#\",\"#...#\",\".#.#.\",\"..#..\"],\n    [\"#...#\",\"#...#\",\"#...#\",\"#...#\",\"#.#.#\",\"##.##\",\"#...#\"],\n    [\"#...#\",\".#.#.\",\"..#..\",\"..#..\",\"..#..\",\".#.#.\",\"#...#\"],\n    [\"#...#\",\".#.#.\",\"..#..\",\"..#..\",\"..#..\",\"..#..\",\"..#..\"],\n    [\"#####\",\"....#\",\"...#.\",\"..#..\",\".#...\",\"#....\",\"#####\"],\n    [\".###.\",\"#..##\",\"#.#.#\",\"#.#.#\",\"##..#\",\"#...#\",\".###.\"],\n    [\"..#..\",\".##..\",\"..#..\",\"..#..\",\"..#..\",\"..#..\",\".###.\"],\n    [\".###.\",\"#...#\",\"....#\",\"...#.\",\"..#..\",\".#...\",\"#####\"],\n    [\"####.\",\"....#\",\"....#\",\".###.\",\"....#\",\"....#\",\"####.\"],\n    [\"#..#.\",\"#..#.\",\"#..#.\",\"#####\",\"...#.\",\"...#.\",\"...#.\"],\n    [\"#####\",\"#....\",\"####.\",\"....#\",\"....#\",\"#...#\",\".###.\"],\n    [\".###.\",\"#....\",\"####.\",\"#...#\",\"#...#\",\"#...#\",\".###.\"],\n    [\"#####\",\"....#\",\"...#.\",\"..#..\",\".#...\",\".#...\",\".#...\"],\n    [\".###.\",\"#...#\",\"#...#\",\".###.\",\"#...#\",\"#...#\",\".###.\"],\n    [\".###.\",\"#...#\",\"#...#\",\".####\",\"....#\",\"....#\",\".###.\"],\n    [\".....\",\".....\",\".....\",\".....\",\".....\",\".....\",\".....\"],\n    [\".....\",\".....\",\".....\",\"#####\",\".....\",\".....\",\".....\"],\n    [\".....\",\".....\",\".....\",\".....\",\".....\",\".##..\",\".##..\"],\n    [\"..#..\",\"..#..\",\".....\",\".....\",\".....\",\".....\",\".....\"],\n    [\"..#..\",\"..#..\",\"..#..\",\"..#..\",\"..#..\",\".....\",\"..#..\"]\n];\n\nfunction decal_glyph(ch) =\n    let (i = search(ch, DECAL_KEYS)) len(i) == 0 ? undef : DECAL_FONT[i[0]];\n\n// Blocks in (x, d), d being distance in from the nearer side, so one list\n// serves both flanks and each reads the right way round from its own side.\nfunction decal_checker() =\n    (decal != \"checker\" && decal != \"both\") ? []\n    : let (sq = max(6, min(14, bevel_run * 0.11)),\n           d0 = bevel_run * 0.06,\n           n  = floor(hill_length / sq),\n           pad = (hill_length - n * sq) / 2)\n      [for (i = [0 : max(0, n - 1)], r = [0 : 1])\n         if ((i + r) % 2 == 0)\n           [pad + i * sq, d0 + r * sq, pad + (i + 1) * sq, d0 + (r + 1) * sq]];\n\nfunction decal_chars() =\n    [for (i = [0 : max(0, len(decal_text) - 1)])\n       if (!is_undef(decal_glyph(decal_text[i]))) decal_text[i]];\n\nfunction decal_letters() =\n    (decal != \"text\" && decal != \"both\") ? []\n    : let (ch = decal_chars(), n = len(ch))\n      n == 0 ? []\n      : let (lo = (decal == \"both\") ? bevel_run * 0.36 : bevel_run * 0.28,\n             hi = bevel_run * 0.80,\n             px = min((hi - lo) / 7, (hill_length * 0.86) / (n * 6 - 1)),\n             w  = (n * 6 - 1) * px,\n             x0 = (hill_length - w) / 2,\n             y0 = lo + ((hi - lo) - 7 * px) / 2)\n        [for (k = [0 : n - 1], r = [0 : 6], c = [0 : 4])\n           if (decal_glyph(ch[k])[6 - r][c] == \"#\")\n             [x0 + (k * 6 + c) * px, y0 + r * px,\n              x0 + (k * 6 + c + 1) * px, y0 + (r + 1) * px]];\n\n// Checker squares, and diagonal strokes in letters like X and Z, touch corner\n// to corner -- a non-manifold vertex. Growing in x alone is enough to turn that\n// into a shared edge, and avoids leaving a sliver between stacked pixels.\nfunction decal_grown() =\n    let (e = 0.15)\n    [for (r = concat(decal_checker(), decal_letters()))\n       [r[0] - e, r[1], r[2] + e, r[3]]];\n\n// Keep decals out of the joint zone -- the seam and the dovetail either side of\n// it. Relief on a tab or in a socket fouls the fit, and the tiles are separate\n// prints anyway, so a letter spanning a joint would read as broken regardless.\nfunction trim_x(rects, c, pad) =\n    [for (r = rects) each\n       (r[2] <= c - pad || r[0] >= c + pad) ? [r]\n       : concat(r[0] < c - pad ? [[r[0], r[1], c - pad, r[3]]] : [],\n                r[2] > c + pad ? [[c + pad, r[1], r[2], r[3]]] : [])];\nfunction trim_d(rects, c, pad) =\n    [for (r = rects) each\n       (r[3] <= c - pad || r[1] >= c + pad) ? [r]\n       : concat(r[1] < c - pad ? [[r[0], r[1], r[2], c - pad]] : [],\n                r[3] > c + pad ? [[r[0], c + pad, r[2], r[3]]] : [])];\n\nfunction fold_x(rects, cuts, pad, i = 0) =\n    i >= len(cuts) ? rects : fold_x(trim_x(rects, cuts[i], pad), cuts, pad, i + 1);\nfunction fold_d(rects, cuts, pad, i = 0) =\n    i >= len(cuts) ? rects : fold_d(trim_d(rects, cuts[i], pad), cuts, pad, i + 1);\n\nfunction decal_rects() =\n    let (pad = tab_depth + 1.5,\n         cx = [for (i = [1 : max(1, nx - 1)]) if (i < nx) i * px],\n         cd = [for (i = [1 : max(1, ny - 1)]) if (i < ny) each [i * py, hill_width - i * py]],\n         a = fold_x(decal_grown(), cx, pad),\n         b = fold_d(a, cd, pad))\n    [for (r = b) if (r[2] - r[0] > 0.4 && r[3] - r[1] > 0.4) r];\n\nmodule decal_prisms() {\n    union()\n        for (r = decal_rects()) {\n            translate([r[0], r[1], -1])\n                cube([r[2] - r[0], r[3] - r[1], BIG]);\n            translate([r[0], hill_width - r[3], -1])\n                cube([r[2] - r[0], r[3] - r[1], BIG]);\n        }\n}\n\n// --------------------------------------------------------------- dovetail ---\n// 2D dovetail pointing +X, root centred on the origin.\nmodule dovetail_2d(grow = 0) {\n    offset(delta = grow)\n        polygon([[0, -tab_neck / 2],\n                 [tab_depth,  -tab_tip / 2],\n                 [tab_depth,   tab_tip / 2],\n                 [0,  tab_neck / 2]]);\n}\n\n// How many dovetails fit on a seam of the given span, and where.\nfunction n_tabs(span) = max(1, round(span / 120));\nfunction tab_pos(span, k) = (k + 0.5) * span / n_tabs(span);\n\n// Seam at constant x = xs, running in y from y0 to y0+span.\n// Only keep tabs where there is enough material to make them worthwhile.\nfunction xseam_tabs(xs, y0, span) =\n    [for (k = [0 : n_tabs(span) - 1])\n        let (p = y0 + tab_pos(span, k))\n        if (h_at(xs, p) >= min_tab_h) p];\n\n// Seam at constant y = ys, running in x from x0 to x0+span.\nfunction yseam_tabs(ys, x0, span) =\n    [for (k = [0 : n_tabs(span) - 1])\n        let (p = x0 + tab_pos(span, k))\n        if (h_at(p, ys) >= min_tab_h) p];\n\n// ------------------------------------------------------- tile footprint -----\n// Plan-view outline of tile (i,j): the rectangle, plus dovetails on its +X and\n// +Y seams, minus sockets on its -X and -Y seams. Neighbours therefore always\n// agree, and every tile still drops straight down into place.\nmodule tile_footprint(i, j) {\n    x0 = i * px;  x1 = (i + 1) * px;\n    y0 = j * py;  y1 = (j + 1) * py;\n\n    difference() {\n        union() {\n            square([px, py]);\n\n            if (i < nx - 1)\n                for (p = xseam_tabs(x1, y0, py))\n                    translate([px, p - y0]) dovetail_2d();\n\n            if (j < ny - 1)\n                for (p = yseam_tabs(y1, x0, px))\n                    translate([p - x0, py]) rotate(90) dovetail_2d();\n        }\n\n        if (i > 0)\n            for (p = xseam_tabs(x0, y0, py))\n                translate([0, p - y0]) dovetail_2d(fit);\n\n        if (j > 0)\n            for (p = yseam_tabs(y0, x0, px))\n                translate([p - x0, 0]) rotate(90) dovetail_2d(fit);\n    }\n}\n\nmodule tile_prism(i, j, inset = 0) {\n    translate([i * px, j * py, -BIG / 2])\n        linear_extrude(BIG)\n            offset(delta = -inset)\n                tile_footprint(i, j);\n}\n\n// --------------------------------------------------------- spike sockets ----\n// One socket per tile, at the thickest point of the area that clears the tile\n// edges and their dovetails. Tiles too thin to swallow one simply get none.\nfunction spike_cands(i, j) =\n    let (x0 = i * px + spike_inset, x1 = (i + 1) * px - spike_inset,\n         y0 = j * py + spike_inset, y1 = (j + 1) * py - spike_inset)\n    (x1 < x0 || y1 < y0) ? []\n    : [for (a = [0 : floor((x1 - x0) / spike_scan)],\n            b = [0 : floor((y1 - y0) / spike_scan)])\n         let (x = x0 + a * spike_scan, y = y0 + b * spike_scan) [x, y, h_at(x, y)]];\n\nfunction spike_spot(i, j) =\n    let (c = spike_cands(i, j))\n    len(c) == 0 ? []\n    : let (best = max([for (q = c) q[2]]))\n      best < socket_depth + socket_roof ? []\n      : [ [for (q = c) if (q[2] >= best - 1e-9) [q[0], q[1]]][0] ];\n\n// The socket carries the spike's own thread form, pushed out by the clearance,\n// so the two mate at every point. Plain bore at both ends: a lead-in to start\n// the screw, and a relief so the ceiling closes flat.\nsocket_crest_r = spike_minor + spike_clear;   // bore at its tightest\nsocket_r       = spike_major + spike_clear;   // groove, and the plain bore\n\nfunction socket_profile(n) =\n    [for (k = [0 : n - 1])\n        let (a = 360 * k / n, u = k / n, t = 1 - abs(2 * u - 1),\n             r = socket_crest_r + (socket_r - socket_crest_r) * t)\n        [r * cos(a), r * sin(a)]];\n\nmodule socket_bore() {\n    th = socket_depth - thread_lead - thread_relief;\n    union() {\n        translate([0, 0, -1])\n            cylinder(h = thread_lead + 1, r = socket_r, $fn = socket_gon);\n        translate([0, 0, thread_lead])\n            linear_extrude(height = th, twist = -360 * th / spike_pitch,\n                           slices = ceil(th * 12), convexity = 8)\n                polygon(socket_profile(socket_gon));\n        translate([0, 0, socket_depth - thread_relief])\n            cylinder(h = thread_relief, r = socket_r, $fn = socket_gon);\n    }\n}\n\nmodule spike_sockets(i, j) {\n    if (spike_len > 0)\n        for (q = spike_spot(i, j))\n            translate([q[0], q[1], 0]) socket_bore();\n}\n\n// The spike itself. Printed stud-down, tapering upward, so nothing overhangs.\n// Its coarse thread forms its own groove in the plain socket and backs out again.\nfunction thread_profile(n = 72) =\n    [for (k = [0 : n - 1])\n        let (a = 360 * k / n, u = k / n, t = 1 - abs(2 * u - 1),\n             r = spike_minor + (spike_major - spike_minor) * t)\n        [r * cos(a), r * sin(a)]];\n\nmodule spike_part() {\n    zf = spike_stud + spike_chamfer;\n    zt = zf + spike_flange_h;\n    union() {\n        linear_extrude(height = spike_stud, twist = -360 * spike_stud / spike_pitch,\n                       slices = ceil(spike_stud * 8), convexity = 8)\n            polygon(thread_profile());\n        translate([0, 0, spike_stud])\n            cylinder(h = spike_chamfer, r1 = spike_major, r2 = spike_flange_r, $fn = 6);\n        translate([0, 0, zf]) cylinder(h = spike_flange_h, r = spike_flange_r, $fn = 6);\n        translate([0, 0, zt])\n            cylinder(h = max(0.1, spike_len), r1 = spike_cone_r, r2 = spike_tip_r, $fn = 48);\n    }\n}\n\n// ------------------------------------------------------------ grip combs ----\nmodule grip_cut() {\n    if (grip_depth > 0)\n        intersection() {\n            difference() {\n                hill_solid();\n                translate([0, 0, -grip_depth]) hill_solid();\n            }\n            for (x = [grip_pitch : grip_pitch : hill_length - grip_pitch])\n                translate([x - grip_width / 2, -BIG / 2, -BIG / 2])\n                    cube([grip_width, BIG, BIG]);\n        }\n}\n\n// ----------------------------------------------------------------- tiles ----\nmodule tile_solid(i, j) {\n    difference() {\n        intersection() { hill_solid(); tile_prism(i, j); }\n        grip_cut();\n        spike_sockets(i, j);\n    }\n}\n\nmodule tile(i, j) {\n    translate([-i * px, -j * py, 0])       // drop it on the origin for printing\n        tile_solid(i, j);\n}\n\n// ------------------------------------------------------------------ main ----\nif (part == \"hill\")\n    for (i = [0 : nx - 1], j = [0 : ny - 1])\n        translate([i * px, j * py, 0]) tile(i, j);\nelse if (part == \"spike\")\n    spike_part();\nelse if (part == \"mono\")          // uncut hill, for checking the joints\n    difference() { hill_solid(); grip_cut(); }\nelse\n    tile(tile_i, tile_j);\n\necho(str(\"tiles: \", nx, \" x \", ny, \" = \", nx * ny,\n         \"   pitch \", px, \" x \", py,\n         \"   printed extent up to \", px + tab_depth, \" x \", py + tab_depth,\n         \"   \", shape, \" max slope \", max_slope(), \" deg\"));\n";</script>
 <script>(function () {
   'use strict';
   var BR = window.BikeRamp;
@@ -1253,6 +1467,13 @@ input[type=range]::-moz-range-thumb {
     flow: PRINTERS[0].flow,
     spikeLen: 6, infill: 0.15, colour: '#FF2E88', mode: 'assembled', isolate: null
   });
+
+  var DECAL_OPTS = [
+    { label:'None',    v:'none' },
+    { label:'Checker', v:'checker' },
+    { label:'Text',    v:'text' },
+    { label:'Both',    v:'both' }
+  ];
 
   var SPIKE_OPTS = [
     { label:'None',    v:0 },
@@ -1844,6 +2065,48 @@ input[type=range]::-moz-range-thumb {
       if (grp.group === 'Hill') host.appendChild(spikeGroup());
     });
 
+    var dg = el('div', 'group');
+    dg.appendChild(el('h2', null, 'Decals'));
+    var dchips = el('div', 'chips');
+    var trow = el('div', 'ctrl');
+    DECAL_OPTS.forEach(function (o) {
+      var c = el('button', 'chip', o.label);
+      c.type = 'button';
+      c.setAttribute('aria-pressed', String(state.decal === o.v));
+      c.addEventListener('click', function () {
+        state.decal = o.v;
+        Array.prototype.forEach.call(dchips.children, function (q) {
+          q.setAttribute('aria-pressed', String(q === c));
+        });
+        trow.style.display = (o.v === 'text' || o.v === 'both') ? '' : 'none';
+        rebuild();
+      });
+      dchips.appendChild(c);
+    });
+    dg.appendChild(dchips);
+
+    var ttop = el('div', 'ctrl-top');
+    var tlab = el('label', null, 'Says');
+    tlab.htmlFor = 'decal-text';
+    var tin = el('input');
+    tin.type = 'text'; tin.id = 'decal-text'; tin.maxLength = 18;
+    tin.className = 'text-in'; tin.value = state.decalText;
+    tin.addEventListener('input', function () {
+      state.decalText = tin.value.toUpperCase();
+      if (tin.value !== state.decalText) tin.value = state.decalText;
+      rebuild();
+    });
+    ttop.appendChild(tlab);
+    trow.appendChild(ttop);
+    trow.appendChild(tin);
+    trow.style.display = (state.decal === 'text' || state.decal === 'both') ? '' : 'none';
+    dg.appendChild(trow);
+    dg.appendChild(el('p', 'hint',
+      'Raised on the side flanks, never on the riding surface \u2014 relief under ' +
+      'a wheel is a bump. A-Z, 0-9 and a few marks; the rest are dropped. ' +
+      'Decals stop short of the joints so a tab still seats.'));
+    host.appendChild(dg);
+
     var fg = el('div', 'group');
     fg.appendChild(el('h2', null, 'Filament colour'));
     var sw = el('div', 'swatches');
@@ -1946,6 +2209,8 @@ input[type=range]::-moz-range-thumb {
       'Largest     ' + r.biggest.m.size.map(function (v) { return Math.round(v); }).join(' x ') +
         ' mm  (bed set to ' + state.bedX + ' x ' + state.bedY + ' mm)' +
         (r.turn ? '  -- turn it on the plate' : ''),
+      'Decals      ' + (state.decal === 'none' ? 'none'
+        : state.decal + (state.decal === 'checker' ? '' : ' -- "' + state.decalText + '"')),
       'Spikes      ' + (state.spikeLen
         ? r.spikes + ' sockets, ' + state.spikeLen + ' mm spike'
         : 'none'),
@@ -2011,6 +2276,8 @@ input[type=range]::-moz-range-thumb {
   function scadSource() {
     var map = {
       shape: '"' + state.shape + '"', deck: state.deck,
+      decal: '"' + state.decal + '"',
+      decal_text: '"' + String(state.decalText).replace(/"/g, '') + '"',
       hill_length: state.hillLength, hill_width: state.hillWidth,
       hill_height: state.hillHeight, humps: state.humps, bevel_run: state.bevelRun,
       edge_lip: state.edgeLip, bed_x: state.bedX, bed_y: state.bedY,

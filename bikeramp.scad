@@ -52,6 +52,11 @@ spike_flange_h= 1.5;
 spike_cone_r  = 7.5;
 spike_tip_r   = 0.6;
 
+/* [Decals] */
+decal        = "none";  // "none" | "text" | "checker" | "both"
+decal_text   = "LITTLE RIPPER";
+decal_relief = 1.2;     // how far the decal stands proud of the flank (mm)
+
 /* [Grip] */
 grip_depth  = 0;     // 0 = smooth. 0.6 gives shallow traction grooves
 grip_pitch  = 14;
@@ -116,30 +121,176 @@ function prof_y(y) =
 function h_at(x, y) = min(prof_x(x), prof_y(y));
 
 // ------------------------------------------------------------ hill solid ----
-module hill_solid() {
-    intersection() {
-        // lengthwise profile, swept across the width
-        translate([0, hill_width + BIG, 0])
-            rotate([90, 0, 0])
-                linear_extrude(hill_width + 2 * BIG)
-                    polygon(concat(
-                        [[0, 0]],
-                        [for (i = [0 : STEPS])
-                            let (x = i * hill_length / STEPS) [x, prof_x(x)]],
-                        [[hill_length, 0]]
-                    ));
+// The lengthwise sweep is floored at z=0, so it alone bounds the solid below.
+// The crosswise sweep runs well below zero, which lets it be raised by the
+// decal relief without lifting the underside off the bed.
+module sweep_x() {
+    translate([0, hill_width + BIG, 0])
+        rotate([90, 0, 0])
+            linear_extrude(hill_width + 2 * BIG)
+                polygon(concat(
+                    [[0, 0]],
+                    [for (i = [0 : STEPS])
+                        let (x = i * hill_length / STEPS) [x, prof_x(x)]],
+                    [[hill_length, 0]]
+                ));
+}
+module sweep_y() {
+    translate([-BIG, 0, 0])
+        rotate([0, 0, 90]) rotate([90, 0, 0])
+            linear_extrude(hill_length + 2 * BIG)
+                polygon(concat(
+                    [[0, -BIG]],
+                    [for (i = [0 : STEPS])
+                        let (y = i * hill_width / STEPS) [y, prof_y(y)]],
+                    [[hill_width, -BIG]]
+                ));
+}
 
-        // crosswise profile, swept along the run
-        translate([-BIG, 0, 0])
-            rotate([0, 0, 90]) rotate([90, 0, 0])
-                linear_extrude(hill_length + 2 * BIG)
-                    polygon(concat(
-                        [[0, 0]],
-                        [for (i = [0 : STEPS])
-                            let (y = i * hill_width / STEPS) [y, prof_y(y)]],
-                        [[hill_width, 0]]
-                    ));
+module hill_solid() {
+    if (decal == "none" || bevel_run <= 0 || len(decal_rects()) == 0) {
+        intersection() { sweep_x(); sweep_y(); }
+    } else {
+        // h = min(prof_x, prof_y + relief) inside the decal blocks, h unchanged
+        // outside -- so union the plain hill with the raised hill clipped to
+        // the blocks. The min() is what keeps a decal from ever standing above
+        // the riding surface.
+        union() {
+            intersection() { sweep_x(); sweep_y(); }
+            intersection() {
+                sweep_x();
+                translate([0, 0, decal_relief]) sweep_y();
+                decal_prisms();
+            }
+        }
     }
+}
+
+// --------------------------------------------------------------- decals -----
+// A blocky 5x7 stencil: every edge is axis-aligned, which keeps the letters
+// crisp and matches the mesh generator block for block.
+DECAL_KEYS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 -.'!";
+DECAL_FONT = [
+    [".###.","#...#","#...#","#####","#...#","#...#","#...#"],
+    ["####.","#...#","####.","#...#","#...#","#...#","####."],
+    [".####","#....","#....","#....","#....","#....",".####"],
+    ["####.","#...#","#...#","#...#","#...#","#...#","####."],
+    ["#####","#....","####.","#....","#....","#....","#####"],
+    ["#####","#....","####.","#....","#....","#....","#...."],
+    [".####","#....","#....","#..##","#...#","#...#",".####"],
+    ["#...#","#...#","#####","#...#","#...#","#...#","#...#"],
+    ["#####","..#..","..#..","..#..","..#..","..#..","#####"],
+    ["####.","...#.","...#.","...#.","...#.","#..#.",".##.."],
+    ["#...#","#..#.","##...","##...","#.#..","#..#.","#...#"],
+    ["#....","#....","#....","#....","#....","#....","#####"],
+    ["#...#","##.##","#.#.#","#...#","#...#","#...#","#...#"],
+    ["#...#","##..#","#.#.#","#..##","#...#","#...#","#...#"],
+    [".###.","#...#","#...#","#...#","#...#","#...#",".###."],
+    ["####.","#...#","#...#","####.","#....","#....","#...."],
+    [".###.","#...#","#...#","#...#","#.#.#","#..#.",".##.#"],
+    ["####.","#...#","#...#","####.","#.#..","#..#.","#...#"],
+    [".####","#....","#....",".###.","....#","....#","####."],
+    ["#####","..#..","..#..","..#..","..#..","..#..","..#.."],
+    ["#...#","#...#","#...#","#...#","#...#","#...#",".###."],
+    ["#...#","#...#","#...#","#...#","#...#",".#.#.","..#.."],
+    ["#...#","#...#","#...#","#...#","#.#.#","##.##","#...#"],
+    ["#...#",".#.#.","..#..","..#..","..#..",".#.#.","#...#"],
+    ["#...#",".#.#.","..#..","..#..","..#..","..#..","..#.."],
+    ["#####","....#","...#.","..#..",".#...","#....","#####"],
+    [".###.","#..##","#.#.#","#.#.#","##..#","#...#",".###."],
+    ["..#..",".##..","..#..","..#..","..#..","..#..",".###."],
+    [".###.","#...#","....#","...#.","..#..",".#...","#####"],
+    ["####.","....#","....#",".###.","....#","....#","####."],
+    ["#..#.","#..#.","#..#.","#####","...#.","...#.","...#."],
+    ["#####","#....","####.","....#","....#","#...#",".###."],
+    [".###.","#....","####.","#...#","#...#","#...#",".###."],
+    ["#####","....#","...#.","..#..",".#...",".#...",".#..."],
+    [".###.","#...#","#...#",".###.","#...#","#...#",".###."],
+    [".###.","#...#","#...#",".####","....#","....#",".###."],
+    [".....",".....",".....",".....",".....",".....","....."],
+    [".....",".....",".....","#####",".....",".....","....."],
+    [".....",".....",".....",".....",".....",".##..",".##.."],
+    ["..#..","..#..",".....",".....",".....",".....","....."],
+    ["..#..","..#..","..#..","..#..","..#..",".....","..#.."]
+];
+
+function decal_glyph(ch) =
+    let (i = search(ch, DECAL_KEYS)) len(i) == 0 ? undef : DECAL_FONT[i[0]];
+
+// Blocks in (x, d), d being distance in from the nearer side, so one list
+// serves both flanks and each reads the right way round from its own side.
+function decal_checker() =
+    (decal != "checker" && decal != "both") ? []
+    : let (sq = max(6, min(14, bevel_run * 0.11)),
+           d0 = bevel_run * 0.06,
+           n  = floor(hill_length / sq),
+           pad = (hill_length - n * sq) / 2)
+      [for (i = [0 : max(0, n - 1)], r = [0 : 1])
+         if ((i + r) % 2 == 0)
+           [pad + i * sq, d0 + r * sq, pad + (i + 1) * sq, d0 + (r + 1) * sq]];
+
+function decal_chars() =
+    [for (i = [0 : max(0, len(decal_text) - 1)])
+       if (!is_undef(decal_glyph(decal_text[i]))) decal_text[i]];
+
+function decal_letters() =
+    (decal != "text" && decal != "both") ? []
+    : let (ch = decal_chars(), n = len(ch))
+      n == 0 ? []
+      : let (lo = (decal == "both") ? bevel_run * 0.36 : bevel_run * 0.28,
+             hi = bevel_run * 0.80,
+             px = min((hi - lo) / 7, (hill_length * 0.86) / (n * 6 - 1)),
+             w  = (n * 6 - 1) * px,
+             x0 = (hill_length - w) / 2,
+             y0 = lo + ((hi - lo) - 7 * px) / 2)
+        [for (k = [0 : n - 1], r = [0 : 6], c = [0 : 4])
+           if (decal_glyph(ch[k])[6 - r][c] == "#")
+             [x0 + (k * 6 + c) * px, y0 + r * px,
+              x0 + (k * 6 + c + 1) * px, y0 + (r + 1) * px]];
+
+// Checker squares, and diagonal strokes in letters like X and Z, touch corner
+// to corner -- a non-manifold vertex. Growing in x alone is enough to turn that
+// into a shared edge, and avoids leaving a sliver between stacked pixels.
+function decal_grown() =
+    let (e = 0.15)
+    [for (r = concat(decal_checker(), decal_letters()))
+       [r[0] - e, r[1], r[2] + e, r[3]]];
+
+// Keep decals out of the joint zone -- the seam and the dovetail either side of
+// it. Relief on a tab or in a socket fouls the fit, and the tiles are separate
+// prints anyway, so a letter spanning a joint would read as broken regardless.
+function trim_x(rects, c, pad) =
+    [for (r = rects) each
+       (r[2] <= c - pad || r[0] >= c + pad) ? [r]
+       : concat(r[0] < c - pad ? [[r[0], r[1], c - pad, r[3]]] : [],
+                r[2] > c + pad ? [[c + pad, r[1], r[2], r[3]]] : [])];
+function trim_d(rects, c, pad) =
+    [for (r = rects) each
+       (r[3] <= c - pad || r[1] >= c + pad) ? [r]
+       : concat(r[1] < c - pad ? [[r[0], r[1], r[2], c - pad]] : [],
+                r[3] > c + pad ? [[r[0], c + pad, r[2], r[3]]] : [])];
+
+function fold_x(rects, cuts, pad, i = 0) =
+    i >= len(cuts) ? rects : fold_x(trim_x(rects, cuts[i], pad), cuts, pad, i + 1);
+function fold_d(rects, cuts, pad, i = 0) =
+    i >= len(cuts) ? rects : fold_d(trim_d(rects, cuts[i], pad), cuts, pad, i + 1);
+
+function decal_rects() =
+    let (pad = tab_depth + 1.5,
+         cx = [for (i = [1 : max(1, nx - 1)]) if (i < nx) i * px],
+         cd = [for (i = [1 : max(1, ny - 1)]) if (i < ny) each [i * py, hill_width - i * py]],
+         a = fold_x(decal_grown(), cx, pad),
+         b = fold_d(a, cd, pad))
+    [for (r = b) if (r[2] - r[0] > 0.4 && r[3] - r[1] > 0.4) r];
+
+module decal_prisms() {
+    union()
+        for (r = decal_rects()) {
+            translate([r[0], r[1], -1])
+                cube([r[2] - r[0], r[3] - r[1], BIG]);
+            translate([r[0], hill_width - r[3], -1])
+                cube([r[2] - r[0], r[3] - r[1], BIG]);
+        }
 }
 
 // --------------------------------------------------------------- dovetail ---

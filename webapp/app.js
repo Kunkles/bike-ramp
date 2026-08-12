@@ -61,6 +61,13 @@
     spikeLen: 6, infill: 0.15, colour: '#FF2E88', mode: 'assembled', isolate: null
   });
 
+  var DECAL_OPTS = [
+    { label:'None',    v:'none' },
+    { label:'Checker', v:'checker' },
+    { label:'Text',    v:'text' },
+    { label:'Both',    v:'both' }
+  ];
+
   var SPIKE_OPTS = [
     { label:'None',    v:0 },
     { label:'1/4 in',  v:6 },
@@ -651,6 +658,48 @@
       if (grp.group === 'Hill') host.appendChild(spikeGroup());
     });
 
+    var dg = el('div', 'group');
+    dg.appendChild(el('h2', null, 'Decals'));
+    var dchips = el('div', 'chips');
+    var trow = el('div', 'ctrl');
+    DECAL_OPTS.forEach(function (o) {
+      var c = el('button', 'chip', o.label);
+      c.type = 'button';
+      c.setAttribute('aria-pressed', String(state.decal === o.v));
+      c.addEventListener('click', function () {
+        state.decal = o.v;
+        Array.prototype.forEach.call(dchips.children, function (q) {
+          q.setAttribute('aria-pressed', String(q === c));
+        });
+        trow.style.display = (o.v === 'text' || o.v === 'both') ? '' : 'none';
+        rebuild();
+      });
+      dchips.appendChild(c);
+    });
+    dg.appendChild(dchips);
+
+    var ttop = el('div', 'ctrl-top');
+    var tlab = el('label', null, 'Says');
+    tlab.htmlFor = 'decal-text';
+    var tin = el('input');
+    tin.type = 'text'; tin.id = 'decal-text'; tin.maxLength = 18;
+    tin.className = 'text-in'; tin.value = state.decalText;
+    tin.addEventListener('input', function () {
+      state.decalText = tin.value.toUpperCase();
+      if (tin.value !== state.decalText) tin.value = state.decalText;
+      rebuild();
+    });
+    ttop.appendChild(tlab);
+    trow.appendChild(ttop);
+    trow.appendChild(tin);
+    trow.style.display = (state.decal === 'text' || state.decal === 'both') ? '' : 'none';
+    dg.appendChild(trow);
+    dg.appendChild(el('p', 'hint',
+      'Raised on the side flanks, never on the riding surface \u2014 relief under ' +
+      'a wheel is a bump. A-Z, 0-9 and a few marks; the rest are dropped. ' +
+      'Decals stop short of the joints so a tab still seats.'));
+    host.appendChild(dg);
+
     var fg = el('div', 'group');
     fg.appendChild(el('h2', null, 'Filament colour'));
     var sw = el('div', 'swatches');
@@ -753,6 +802,8 @@
       'Largest     ' + r.biggest.m.size.map(function (v) { return Math.round(v); }).join(' x ') +
         ' mm  (bed set to ' + state.bedX + ' x ' + state.bedY + ' mm)' +
         (r.turn ? '  -- turn it on the plate' : ''),
+      'Decals      ' + (state.decal === 'none' ? 'none'
+        : state.decal + (state.decal === 'checker' ? '' : ' -- "' + state.decalText + '"')),
       'Spikes      ' + (state.spikeLen
         ? r.spikes + ' sockets, ' + state.spikeLen + ' mm spike'
         : 'none'),
@@ -818,6 +869,8 @@
   function scadSource() {
     var map = {
       shape: '"' + state.shape + '"', deck: state.deck,
+      decal: '"' + state.decal + '"',
+      decal_text: '"' + String(state.decalText).replace(/"/g, '') + '"',
       hill_length: state.hillLength, hill_width: state.hillWidth,
       hill_height: state.hillHeight, humps: state.humps, bevel_run: state.bevelRun,
       edge_lip: state.edgeLip, bed_x: state.bedX, bed_y: state.bedY,

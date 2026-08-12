@@ -312,6 +312,12 @@ input[type=range]::-moz-range-thumb {
 .select:hover { border-color:var(--ink-3); }
 .select:focus { border-color:var(--ice); outline:none; }
 .ctrl-val .x { color:var(--ink-3); font-size:11px; padding:0 1px; }
+.text-in {
+  width:100%; font-family:var(--display); font-size:19px; letter-spacing:.04em;
+  color:var(--accent); background:var(--sunk); border:2px solid var(--line);
+  border-radius:5px; padding:5px 9px; text-transform:uppercase;
+}
+.text-in:focus { border-color:var(--ice); outline:none; background:var(--panel); }
 
 /* ---------------------------------------------------------------- mobile -- */
 @media (max-width:860px) {

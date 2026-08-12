@@ -25,6 +25,9 @@
     tabDepth: 12, tabNeck: 18, tabTip: 26, fit: 0.35, minTabH: 10,
     spikeLen: 0,       // ground spike protrusion, mm. 0 = no spike mounts
     flow: 8,           // average volumetric throughput, mm^3/s -- see estimate()
+    decal: 'none',     // 'none' | 'text' | 'checker' | 'both'
+    decalText: 'LITTLE RIPPER',
+    decalRelief: 1.2,  // how far the decal stands proud of the flank, mm
     cell: 8,           // coarsest mesh cell, mm. Refined automatically below
     chord: 0.05        // most a flat facet may sag below the true surface, mm
   };
@@ -72,6 +75,149 @@
            (SPIKE.socketR - SPIKE.socketCrestR) * threadCrest(th, z);
   }
 
+  // --------------------------------------------------------------- decals ---
+  // Raised graphics live on the side flanks only. Nothing goes on the riding
+  // surface: a relief pattern under a 12" wheel is a bump and a trip edge.
+  //
+  // A blocky 5x7 stencil keeps every edge axis-aligned, so each one lands on a
+  // mesh grid line exactly and the letters come out crisp rather than serrated.
+  var FONT = {"A":[".###.","#...#","#...#","#####","#...#","#...#","#...#"],
+    "B":["####.","#...#","####.","#...#","#...#","#...#","####."],
+    "C":[".####","#....","#....","#....","#....","#....",".####"],
+    "D":["####.","#...#","#...#","#...#","#...#","#...#","####."],
+    "E":["#####","#....","####.","#....","#....","#....","#####"],
+    "F":["#####","#....","####.","#....","#....","#....","#...."],
+    "G":[".####","#....","#....","#..##","#...#","#...#",".####"],
+    "H":["#...#","#...#","#####","#...#","#...#","#...#","#...#"],
+    "I":["#####","..#..","..#..","..#..","..#..","..#..","#####"],
+    "J":["####.","...#.","...#.","...#.","...#.","#..#.",".##.."],
+    "K":["#...#","#..#.","##...","##...","#.#..","#..#.","#...#"],
+    "L":["#....","#....","#....","#....","#....","#....","#####"],
+    "M":["#...#","##.##","#.#.#","#...#","#...#","#...#","#...#"],
+    "N":["#...#","##..#","#.#.#","#..##","#...#","#...#","#...#"],
+    "O":[".###.","#...#","#...#","#...#","#...#","#...#",".###."],
+    "P":["####.","#...#","#...#","####.","#....","#....","#...."],
+    "Q":[".###.","#...#","#...#","#...#","#.#.#","#..#.",".##.#"],
+    "R":["####.","#...#","#...#","####.","#.#..","#..#.","#...#"],
+    "S":[".####","#....","#....",".###.","....#","....#","####."],
+    "T":["#####","..#..","..#..","..#..","..#..","..#..","..#.."],
+    "U":["#...#","#...#","#...#","#...#","#...#","#...#",".###."],
+    "V":["#...#","#...#","#...#","#...#","#...#",".#.#.","..#.."],
+    "W":["#...#","#...#","#...#","#...#","#.#.#","##.##","#...#"],
+    "X":["#...#",".#.#.","..#..","..#..","..#..",".#.#.","#...#"],
+    "Y":["#...#",".#.#.","..#..","..#..","..#..","..#..","..#.."],
+    "Z":["#####","....#","...#.","..#..",".#...","#....","#####"],
+    "0":[".###.","#..##","#.#.#","#.#.#","##..#","#...#",".###."],
+    "1":["..#..",".##..","..#..","..#..","..#..","..#..",".###."],
+    "2":[".###.","#...#","....#","...#.","..#..",".#...","#####"],
+    "3":["####.","....#","....#",".###.","....#","....#","####."],
+    "4":["#..#.","#..#.","#..#.","#####","...#.","...#.","...#."],
+    "5":["#####","#....","####.","....#","....#","#...#",".###."],
+    "6":[".###.","#....","####.","#...#","#...#","#...#",".###."],
+    "7":["#####","....#","...#.","..#..",".#...",".#...",".#..."],
+    "8":[".###.","#...#","#...#",".###.","#...#","#...#",".###."],
+    "9":[".###.","#...#","#...#",".####","....#","....#",".###."],
+    " ":[".....",".....",".....",".....",".....",".....","....."],
+    "-":[".....",".....",".....","#####",".....",".....","....."],
+    ".":[".....",".....",".....",".....",".....",".##..",".##.."],
+    "'":["..#..","..#..",".....",".....",".....",".....","....."],
+    "!":["..#..","..#..","..#..","..#..","..#..",".....","..#.."]};
+
+  // Decal rectangles in (x, d) where d is distance in from the nearer side, so
+  // one list serves both flanks and each reads the right way round from its own
+  // side. Returned as [x0, d0, x1, d1].
+  function decalRects(p) {
+    if (p.decal === 'none' || p.bevelRun <= 0) return [];
+    var out = [], L = p.hillLength, B = p.bevelRun;
+
+    if (p.decal === 'checker' || p.decal === 'both') {
+      var sq = Math.max(6, Math.min(14, B * 0.11));
+      var d0 = B * 0.06, n = Math.floor(L / sq);
+      var pad = (L - n * sq) / 2;
+      for (var i = 0; i < n; i++)
+        for (var r = 0; r < 2; r++)
+          if ((i + r) % 2 === 0)
+            out.push([pad + i * sq, d0 + r * sq, pad + (i + 1) * sq, d0 + (r + 1) * sq]);
+    }
+
+    if (p.decal === 'text' || p.decal === 'both') {
+      var txt = String(p.decalText || '').toUpperCase().split('')
+                  .filter(function (c) { return FONT[c]; });
+      if (!txt.length) return out;
+      var lo = p.decal === 'both' ? B * 0.36 : B * 0.28, hi = B * 0.80;
+      // fit the block to whichever runs out first, the flank or the length
+      var px = Math.min((hi - lo) / 7, (L * 0.86) / (txt.length * 6 - 1));
+      var w = (txt.length * 6 - 1) * px, x0 = (L - w) / 2;
+      var y0 = lo + ((hi - lo) - 7 * px) / 2;
+      txt.forEach(function (ch, k) {
+        var rows = FONT[ch];
+        for (var r = 0; r < 7; r++) {
+          var run = -1;
+          for (var c = 0; c <= 5; c++) {
+            var on = c < 5 && rows[6 - r].charAt(c) === '#';
+            if (on && run < 0) run = c;
+            if (!on && run >= 0) {                       // merge a row of pixels
+              out.push([x0 + (k * 6 + run) * px, y0 + r * px,
+                        x0 + (k * 6 + c) * px,   y0 + (r + 1) * px]);
+              run = -1;
+            }
+          }
+        }
+      });
+    }
+    // Checker squares, and diagonal strokes in letters like X and Z, touch
+    // corner to corner. That is a non-manifold vertex, so grow every block a
+    // hair: diagonal neighbours then overlap along a real edge instead.
+    // Growing in x alone is enough: a diagonal neighbour then shares a real
+    // edge segment rather than a point. Growing in d as well would leave a
+    // 2e-wide sliver between stacked pixels of the same stroke.
+    var e = 0.15;
+    out = out.map(function (r) { return [r[0] - e, r[1], r[2] + e, r[3]]; });
+
+    // Keep decals out of the joint zone -- the seam itself and the dovetail
+    // reach either side of it. Two reasons. Relief on a tab or in a socket
+    // fouls the fit; and a block crossing the tile's plan boundary steps the
+    // side wall by the relief at a single point, which is a T-junction. The
+    // tiles are separate prints with clearance anyway, so a letter spanning a
+    // joint would read as broken however it was meshed.
+    var t = tiling(p), pad = p.tabDepth + 1.5, cutX = [], cutD = [], i;
+    for (i = 1; i < t.nx; i++) cutX.push(i * t.px);
+    for (i = 1; i < t.ny; i++) { cutD.push(i * t.py); cutD.push(p.hillWidth - i * t.py); }
+    return trimRects(trimRects(out, cutX, 0, pad), cutD, 1, pad);
+  }
+
+  // Cut rectangles clear of each seam, dropping slivers.
+  function trimRects(rects, cuts, axis, gap) {
+    if (!cuts.length) return rects;
+    var lo = axis ? 1 : 0, hi = axis ? 3 : 2, out = [];
+    rects.forEach(function (r) {
+      var parts = [r];
+      cuts.forEach(function (c) {
+        var next = [];
+        parts.forEach(function (q) {
+          if (q[hi] <= c - gap || q[lo] >= c + gap) { next.push(q); return; }
+          if (q[lo] < c - gap) { var a = q.slice(); a[hi] = c - gap; next.push(a); }
+          if (q[hi] > c + gap) { var b = q.slice(); b[lo] = c + gap; next.push(b); }
+        });
+        parts = next;
+      });
+      parts.forEach(function (q) { if (q[hi] - q[lo] > 0.4) out.push(q); });
+    });
+    return out;
+  }
+
+  // Height added to the flank at (x,y). Zero everywhere else.
+  function reliefAt(p, x, y) {
+    var rects = p._decal;
+    if (!rects || !rects.length) return 0;
+    var d = Math.min(y, p.hillWidth - y);
+    for (var i = 0; i < rects.length; i++) {
+      var r = rects[i];
+      if (x >= r[0] && x <= r[2] && d >= r[1] && d <= r[3]) return p.decalRelief;
+    }
+    return 0;
+  }
+
   // -------------------------------------------------------------- profile ---
   // Three lengthwise profiles. 'roller' comes back down to the ground; 'drop'
   // and 'kicker' both finish at full height, so the far end of the last tile is
@@ -103,7 +249,10 @@
     var t = Math.min(1, Math.max(0, Math.min(y, p.hillWidth - y) / p.bevelRun));
     return p.edgeLip + (p.hillHeight - p.edgeLip) * t;
   }
-  function hAt(p, x, y) { return Math.min(profX(p, x), profY(p, y)); }
+  function flankAt(p, x, y) { return profY(p, y) + reliefAt(p, x, y); }
+  function hAt(p, x, y) { return Math.min(profX(p, x), flankAt(p, x, y)); }
+  // Surface height for a piece that carries one relief value throughout.
+  function topOf(p, rel, x, y) { return Math.min(profX(p, x), profY(p, y) + rel); }
 
   // Steepest gradient the rider meets. For a kicker that is the lip, i.e. the
   // takeoff angle; for a drop it is the approach, not the edge itself.
@@ -321,8 +470,8 @@
   // The cut point on a shared edge is interpolated from that edge's endpoints
   // alone, so the neighbouring cell computes an identical point and the surface
   // stays closed.
-  function splitAtCrease(p, poly) {
-    var g = poly.map(function (q) { return profX(p, q[0]) - profY(p, q[1]); });
+  function splitAtCrease(p, poly, rel) {
+    var g = poly.map(function (q) { return profX(p, q[0]) - (profY(p, q[1]) + rel); });
     var pos = false, neg = false, i, j;
     for (i = 0; i < g.length; i++) {
       if (g[i] > 0) pos = true;
@@ -350,6 +499,22 @@
     if (Math.abs(Math.abs(area(A)) + Math.abs(area(B)) - ar) > 1e-6 * (ar + 1))
       return null;
     return [A, B];
+  }
+
+  // A vertex landing exactly on a cut line gets emitted by both the clip and
+  // the split, leaving a repeated point that fans out into a zero-area
+  // triangle. Harmless to a slicer, but it puts four faces on an edge and makes
+  // the mesh non-manifold, so drop repeats before building anything.
+  function dedupe(poly) {
+    var Q = 1e4, out = [], i;
+    var same = function (a, b) {
+      return Math.round(a[0] * Q) === Math.round(b[0] * Q) &&
+             Math.round(a[1] * Q) === Math.round(b[1] * Q);
+    };
+    for (i = 0; i < poly.length; i++)
+      if (!out.length || !same(out[out.length - 1], poly[i])) out.push(poly[i]);
+    while (out.length > 1 && same(out[0], out[out.length - 1])) out.pop();
+    return out;
   }
 
   function area(poly) {
@@ -402,10 +567,16 @@
     });
     // and on the kinks in the profiles themselves
     if (p.bevelRun > 0) { cy.push(p.bevelRun); cy.push(p.hillWidth - p.bevelRun); }
+    // decal blocks are axis-aligned, so a line on each edge makes them crisp
+    if (p._decal) p._decal.forEach(function (r) {
+      cx.push(r[0], r[2]);
+      cy.push(r[1], r[3], p.hillWidth - r[1], p.hillWidth - r[3]);
+    });
     if (p.shape === 'drop')
       cx.push(p.hillLength - Math.min(p.deck, p.hillLength * 0.8));
     var xs = gridLines(bx0, bx1, cx, p.cell);
     var ys = gridLines(by0, by1, cy, p.cell);
+    var levels = (p._decal && p._decal.length) ? [0, p.decalRelief] : [0];
 
     var pieces = [];
     for (var a = 0; a < xs.length - 1; a++) {
@@ -445,12 +616,30 @@
           break;
         }
 
+        // Grid lines sit on every decal edge, so a cell is wholly in or out of
+        // each block and its centre settles the relief for the whole piece.
+        var rel = reliefAt(p, mx, my);
+        // Split at the fold for *every* relief level in play, not just this
+        // cell's. Near the toes the fold runs through the decal bands, and if
+        // each cell split only at its own fold two neighbours would cut their
+        // shared edge in different places and tear the mesh open.
         var push = function (q, fl) {
           if (q.length < 3) return;
-          var halves = splitAtCrease(p, q);
-          if (!halves) { pieces.push({ poly: q, floor: fl }); return; }
-          if (halves[0].length >= 3) pieces.push({ poly: halves[0], floor: fl });
-          if (halves[1].length >= 3) pieces.push({ poly: halves[1], floor: fl });
+          var work = [q];
+          levels.forEach(function (lv) {
+            var next = [];
+            work.forEach(function (w) {
+              var halves = splitAtCrease(p, w, lv);
+              if (!halves) { next.push(w); return; }
+              if (halves[0].length >= 3) next.push(halves[0]);
+              if (halves[1].length >= 3) next.push(halves[1]);
+            });
+            work = next;
+          });
+          work.forEach(function (w) {
+            var c = dedupe(w);
+            if (c.length >= 3) pieces.push({ poly: c, floor: fl, rel: rel });
+          });
         };
 
         if (split) {
@@ -471,7 +660,17 @@
     var tris = [], edges = new Map(), Q = 1e4;
     var key = function (x, y) { return Math.round(x * Q) + ':' + Math.round(y * Q); };
 
+    // A triangle with a repeated vertex -- a fan over a duplicated point, a wall
+    // whose two heights coincide -- carries an edge and its reverse, so it
+    // cancels against itself and can be dropped. Test for that, not for small
+    // area: a genuinely thin sliver has three live edges, and deleting it tears
+    // a hole in the surface.
     function tri(ax, ay, az, bx, by, bz, cx2, cy2, cz) {
+      var q = function (v) { return Math.round(v * 1e4); };
+      var A = q(ax) + ',' + q(ay) + ',' + q(az);
+      var Bv = q(bx) + ',' + q(by) + ',' + q(bz);
+      var C = q(cx2) + ',' + q(cy2) + ',' + q(cz);
+      if (A === Bv || Bv === C || C === A) return;
       tris.push(ax, ay, az, bx, by, bz, cx2, cy2, cz);
     }
     // Vertical quad along a->b. Interior lies left of a->b, so this faces out.
@@ -524,8 +723,8 @@
     }
 
     pieces.forEach(function (pc) {
-      var poly = pc.poly, f = pc.floor, n = poly.length, i;
-      var h = poly.map(function (q) { return hAt(p, q[0], q[1]); });
+      var poly = pc.poly, f = pc.floor, rel = pc.rel || 0, n = poly.length, i;
+      var h = poly.map(function (q) { return topOf(p, rel, q[0], q[1]); });
       for (i = 1; i < n - 1; i++) {
         tri(poly[0][0], poly[0][1], h[0],
             poly[i][0], poly[i][1], h[i],
@@ -542,20 +741,27 @@
         if (edges.has(rev)) {
           var o = edges.get(rev);
           edges.delete(rev);
-          if (Math.abs(o.f - f) > 1e-6) {          // socket wall
+          if (Math.abs(o.f - f) > 1e-9) {          // socket wall
             var lo = f < o.f ? { a: a, b: b, f: f } : { a: o.a, b: o.b, f: o.f };
             var top = Math.max(f, o.f);
             var pk = pocketOn(lo.a, lo.b);
             if (pk) threadWall(pk, lo.a, lo.b, lo.f, top);
             else wall(lo.a, lo.b, lo.f, lo.f, top, top);
           }
-        } else edges.set(ka + '|' + kb, { a: a, b: b, f: f });
+          if (Math.abs(o.rel - rel) > 1e-9) {      // decal step, at the surface
+            var hi = rel > o.rel ? { a: a, b: b, r: rel } : { a: o.a, b: o.b, r: o.rel };
+            var lr = Math.min(rel, o.rel);
+            wall(hi.a, hi.b,
+                 topOf(p, lr, hi.a[0], hi.a[1]), topOf(p, lr, hi.b[0], hi.b[1]),
+                 topOf(p, hi.r, hi.a[0], hi.a[1]), topOf(p, hi.r, hi.b[0], hi.b[1]));
+          }
+        } else edges.set(ka + '|' + kb, { a: a, b: b, f: f, rel: rel });
       }
     });
 
     edges.forEach(function (e) {
-      var a = e.a, b = e.b;
-      wall(a, b, e.f, e.f, hAt(p, a[0], a[1]), hAt(p, b[0], b[1]));
+      var a = e.a, b = e.b, r = e.rel || 0;
+      wall(a, b, e.f, e.f, topOf(p, r, a[0], a[1]), topOf(p, r, b[0], b[1]));
     });
     return tris;
   }
@@ -757,6 +963,7 @@
       if (q.bedX == null) p.bedX = q.maxPrint;
       if (q.bedY == null) p.bedY = q.maxPrint;
     }
+    p._decal = decalRects(p);
     p.cell = meshCell(p);
     var t = tiling(p);
     var tiles = [], total = { volume: 0, areaUp: 0, areaDown: 0, areaSide: 0 };
@@ -799,6 +1006,7 @@
               stlBinary: stlBinary, zip: zip,
               SPIKE: SPIKE, spikeSpots: spikeSpots, spikeMesh: spikeMesh,
               socketRadius: socketRadius, spikeRadius: spikeRadius,
+              decalRects: decalRects, reliefAt: reliefAt,
               threadCrest: threadCrest,
               xseamTabs: xseamTabs, yseamTabs: yseamTabs };
 

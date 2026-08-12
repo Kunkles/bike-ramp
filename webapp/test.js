@@ -43,6 +43,26 @@ function readSTL(file) {
   return tris;
 }
 
+// Stricter than watertight: every undirected edge must be shared by exactly two
+// faces. Edge cancellation alone passes meshes where four faces meet on one
+// edge -- which is what zero-area triangles and corner-touching blocks produce.
+function nonManifold(tris) {
+  const Q = 1e4, m = new Map();
+  const key = (i) => [0, 1, 2].map((c) => Math.round(tris[i + c] * Q)).join(',');
+  for (let i = 0; i < tris.length; i += 9) {
+    const v = [key(i), key(i + 3), key(i + 6)];
+    for (let e = 0; e < 3; e++) {
+      const a = v[e], b = v[(e + 1) % 3];
+      if (a === b) continue;
+      const u = a < b ? a + '|' + b : b + '|' + a;
+      m.set(u, (m.get(u) || 0) + 1);
+    }
+  }
+  let bad = 0;
+  m.forEach((n) => { if (n !== 2) bad++; });
+  return bad;
+}
+
 // Every directed edge must be matched by exactly one opposite directed edge.
 function watertight(tris) {
   const Q = 1e4, edges = new Map();
@@ -120,9 +140,15 @@ for (const cfg of [{}, { hillHeight: 70, hillLength: 800 },
                    { shape: 'drop', hillLength: 300, hillHeight: 80, deck: 250,
                      spikeLen: 6 },
                    { shape: 'kicker', hillLength: 350, hillHeight: 40 },
-                   { shape: 'kicker', hillLength: 250, hillHeight: 90, spikeLen: 6 }]) {
+                   { shape: 'kicker', hillLength: 250, hillHeight: 90, spikeLen: 6 },
+                   { decal: 'checker' }, { decal: 'text' },
+                   { decal: 'text', decalText: "OWEN'S RAMP", hillLength: 800 },
+                   { decal: 'both', spikeLen: 6 },
+                   { decal: 'both', shape: 'drop', hillLength: 500, hillHeight: 50 }]) {
   const b = BR.build(cfg);
   const leaks = b.tiles.reduce((s, t) => s + watertight(t.tris), 0);
+  const bad = b.tiles.reduce((s, t) => s + nonManifold(t.tris), 0);
+  ok(bad === 0, `${JSON.stringify(cfg)} has ${bad} non-manifold edges`);
   const big = Math.max(b.biggest.m.size[0], b.biggest.m.size[1]);
   console.log(`   ${JSON.stringify(cfg).padEnd(46)} ${b.tiles.length} tiles  ` +
               `max ${big.toFixed(0).padStart(3)}mm  slope ${b.slope.toFixed(1).padStart(4)}  ` +
@@ -281,7 +307,10 @@ if (!haveOpenSCAD()) {
                               '-D', 'shape="kicker"', '-D', 'hill_length=350',
                               '-D', 'hill_height=40'],
      () => BR.build({ shape: 'kicker', hillLength: 350, hillHeight: 40 })
-             .tiles.find((t) => t.name === 'tile_10').m]
+             .tiles.find((t) => t.name === 'tile_10').m],
+    ['decal, tile 1,0',      ['-D', 'part="tile"', '-D', 'tile_i=1', '-D', 'tile_j=0',
+                              '-D', 'decal="both"'],
+     () => BR.build({ decal: 'both' }).tiles.find((t) => t.name === 'tile_10').m]
   ];
   for (const [label, args, jsFn] of cases) {
     const ref = scad(args), js = jsFn();
@@ -295,6 +324,35 @@ if (!haveOpenSCAD()) {
       ok(Math.abs(js.size[k] - ref.size[k]) < 0.4,
          `${label}: bbox axis ${k} ${js.size[k].toFixed(2)} vs ${ref.size[k].toFixed(2)}`);
   }
+}
+
+console.log('\n7. decals sit on the flanks, never the riding surface\n');
+{
+  const b = BR.build({ decal: 'both' }), p = b.params;
+  console.log(`   blocks             ${p._decal.length}`);
+  // nothing raised may reach the part of the surface a wheel runs on
+  let worst = 0, onDeck = 0;
+  for (const r of p._decal) {
+    for (let x = r[0]; x <= r[2]; x += 2)
+      for (let d = r[1]; d <= r[3]; d += 2) {
+        const plain = Math.min(BR.profX(p, x), BR.profY(p, d));
+        const withDecal = BR.hAt(p, x, d);
+        worst = Math.max(worst, withDecal - plain);
+        if (BR.profY(p, d) > BR.profX(p, x)) onDeck++;      // on the profX branch
+      }
+  }
+  console.log(`   max rise           ${worst.toFixed(2)} mm (relief is ${p.decalRelief})`);
+  ok(worst <= p.decalRelief + 1e-9,
+     `a decal rises ${worst.toFixed(2)}mm, more than the relief`);
+
+  // and none of it may land on a dovetail, where it would foul the fit
+  const t = BR.tiling(p);
+  let onJoint = 0;
+  for (const r of p._decal)
+    for (let i = 1; i < t.nx; i++)
+      if (r[0] < i * t.px + p.tabDepth && r[2] > i * t.px - p.tabDepth) onJoint++;
+  console.log(`   blocks on a joint  ${onJoint}`);
+  ok(onJoint === 0, `${onJoint} decal blocks overlap a dovetail`);
 }
 
 console.log(fail ? `\n${fail} FAILURES\n` : '\nall checks passed\n');

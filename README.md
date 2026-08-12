@@ -153,6 +153,27 @@ Starting points, all gentle: drop 500 × 300 × 50 with a 150 mm deck (12.4°
 approach), jump 350 × 300 × 40 (12.7° takeoff, ~0.6 kg and 16 h — much cheaper
 than the roller).
 
+## Decals
+
+Raised graphics on the side flanks — a blocky stencil word and a checkered band.
+Type whatever you like in **Says**; A–Z, 0–9 and a few marks are supported and
+anything else is dropped. It scales to fit and centres itself.
+
+**Nothing goes on the riding surface.** Relief under a 12" wheel is a bump and a
+trip edge, so decals live only on the flanks, which are already sloped and not
+ridden on. That is not a convention, it is enforced by the geometry: the height
+field is `min(profX, profY + relief)`, and the `min` clamps a decal to the
+riding surface rather than letting it rise above.
+
+Decals also stop short of every joint, by the seam plus a dovetail either side.
+Relief on a tab or inside a socket would foul the fit, and the tiles are
+separate prints with clearance anyway — a letter spanning a joint reads as
+broken however it is meshed.
+
+The letters are a 5×7 stencil so every edge is axis-aligned and lands on a mesh
+grid line exactly, which is what keeps them crisp and lets OpenSCAD and the mesh
+generator agree block for block.
+
 ## Ground spikes
 
 On by default at ¼ inch; the **Underside** view in the app shows the sockets.
@@ -265,6 +286,13 @@ Geometry only — nothing here has been printed or ridden.
 - The riding surface is continuous across every seam, and follows the height
   field to within 0.05 mm across eight shapes including the fold at the side
   taper (`node webapp/test.js`, section 5).
+- Every tile is **manifold**, not merely closed: each undirected edge is shared
+  by exactly two faces, across 17 configurations. Edge-cancellation alone — what
+  the suite checked before — passes meshes where four faces meet on one edge,
+  which is what zero-area triangles and corner-touching decal blocks produce.
+  Adding that check found and fixed 60 such edges around the spike sockets that
+  had been passing as watertight.
+- No decal rises above the riding surface, and none overlaps a dovetail.
 - The generator's mesher agrees with OpenSCAD to within 0.15% on every tile
   (0.06% with spike sockets, 0.05% on the drop and the jump, 0.21% on the spike
   itself), and its exported STLs stay manifold after rounding to float32
