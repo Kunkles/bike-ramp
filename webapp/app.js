@@ -58,7 +58,7 @@
     bedX: PRINTERS[0].x - BED_MARGIN,
     bedY: PRINTERS[0].y - BED_MARGIN,
     flow: PRINTERS[0].flow,
-    spikeLen: 6, infill: 0.15, colour: '#E2620A', mode: 'assembled', isolate: null
+    spikeLen: 6, infill: 0.15, colour: '#FF2E88', mode: 'assembled', isolate: null
   });
 
   var SPIKE_OPTS = [
@@ -68,8 +68,9 @@
     { label:'1 in',    v:25 }
   ];
 
-  var FILAMENTS = ['#E2620A','#D8322F','#F0B429','#2F7D5E','#2B5FA8','#6B4E9B',
-                   '#E8E4DC','#2A2E30'];
+  // Haro teal, hot magenta, acid yellow -- 1988 in a spool.
+  var FILAMENTS = ['#FF2E88','#25E3D8','#FFE14D','#7A45E8','#39C85B','#FF6B1A',
+                   '#F2EFE4','#1A1728'];
 
   var CONTROLS = [
     { group:'Hill', custom:'shape', items:[
@@ -737,7 +738,7 @@
   function readme() {
     var r = result, e = r.estimate;
     return [
-      'Balance-bike coasting hill', '',
+      'LITTLE RIPPER -- ramp generator', '',
       'Shape       ' + (state.shape === 'drop'
         ? 'step drop -- rise, ' + state.deck + ' mm deck, then a ' +
           Math.round(state.hillHeight) + ' mm vertical edge'

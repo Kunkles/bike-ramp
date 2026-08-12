@@ -17,8 +17,8 @@ ROOT = HERE.parent
 FRAGMENT = HERE / "coasting-hill.html"
 PAGE = ROOT / "docs" / "index.html"
 
-DESCRIPTION = ("Parametric generator for a printable balance-bike coasting hill: "
-               "pick your printer, size the hill, download the STLs.")
+DESCRIPTION = ("Little Ripper: parametric generator for printable balance-bike "
+               "ramps. Pick your printer, size the ramp, download the STLs.")
 
 page = (HERE / "page.html").read_text()
 for token, text in [

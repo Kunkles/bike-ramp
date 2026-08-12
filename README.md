@@ -1,10 +1,10 @@
-# Balance-bike coasting hill
+# Little Ripper — Ramp Generator
 
 **→ [Open the generator](https://kunkles.github.io/bike-ramp/)**
 
-Printable features for a toddler on a balance bike — a roller hill, a step
-drop, or a little curved jump — split into tiles that fit your printer bed and
-lock together with drop-in dovetails.
+Printable ramps for a toddler on a balance bike — a roller hill, a step drop, or
+a little curved jump — split into tiles that fit your printer bed and lock
+together with drop-in dovetails.
 
 ![assembled](preview_hill.png)
 
@@ -22,6 +22,7 @@ than a drop.
 | | |
 |---|---|
 | `webapp/coasting-hill.html` | **the generator** — sliders, live 3D, downloads the STLs as a zip |
+| `webapp/style.css` | the look: late-80s freestyle BMX, Haro teal and hot magenta |
 | `bikeramp.scad` | the same model in OpenSCAD; every dimension is a parameter at the top |
 | `render.sh` | exports all tiles to `stl/` |
 | `stl/tile_IJ.stl` | the default hill **without** spike sockets — also the test fixture. `I` = position along the run (0…2), `J` = across the width (0…1) |

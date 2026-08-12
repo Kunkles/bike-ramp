@@ -1,4 +1,4 @@
-# Test plate
+# Test plate — Little Ripper
 
 One plate, full-size joints. Print this before committing to the real hill.
 
