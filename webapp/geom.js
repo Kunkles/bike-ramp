@@ -174,26 +174,48 @@
         .filter(function (w) { return w.length; });
       if (!words.length) return finishRects(p, out);
 
-      var span = textSpan(p);
+      var span = textSpan(p), spanW = span[1] - span[0];
       var lo = p.decal === 'both' ? B * 0.36 : B * 0.26;
-
-      // Keep the block below the fold. Above it the riding surface takes over
-      // and min() clamps the relief flat, so lettering there simply vanishes.
-      var hMin = Infinity, q;
-      for (q = 0; q <= 8; q++)
-        hMin = Math.min(hMin, profX(p, span[0] + (span[1] - span[0]) * (0.1 + 0.1 * q)));
-      var dFold = B * Math.max(0, Math.min(1,
-        (hMin - p.edgeLip) / Math.max(1e-6, p.hillHeight - p.edgeLip)));
-      var hi = Math.min(B * 0.82, dFold - 2);
-      if (hi - lo < 6) return finishRects(p, out);      // no room to letter
-
+      var hiCap = B * 0.82;
       var gap = 2, nl = words.length;
       var rowsTot = nl * 7 + (nl - 1) * gap;
-      var widest = words.reduce(function (m, w) { return Math.max(m, w.length); }, 0);
-      var px = Math.min((hi - lo) / rowsTot,
-                        (span[1] - span[0]) * 0.9 / (widest * 6 - 1));
+      var units = words.reduce(function (m, w) { return Math.max(m, w.length); }, 0) * 6 - 1;
+
+      // Put the block over the tallest part of the joint-free run, not its
+      // middle, and judge the room available from where the block actually
+      // lands rather than from the whole run. Measuring the whole run means a
+      // short ramp is judged by its toe, and the text sizes itself out of
+      // existence -- which it did below about 500 mm.
+      var peakX = span[0], peakH = -1, q;
+      for (q = 0; q <= 40; q++) {
+        var xq = span[0] + spanW * q / 40, hq = profX(p, xq);
+        if (hq > peakH) { peakH = hq; peakX = xq; }
+      }
+      var roomFor = function (w) {
+        var mid = Math.min(Math.max(peakX, span[0] + w / 2), span[1] - w / 2);
+        var hmin = Infinity;
+        for (var k = 0; k <= 12; k++)
+          hmin = Math.min(hmin, profX(p, mid - w / 2 + w * k / 12));
+        var dFold = B * Math.max(0, Math.min(1,
+          (hmin - p.edgeLip) / Math.max(1e-6, p.hillHeight - p.edgeLip)));
+        return { mid: mid, hi: Math.min(hiCap, dFold - 2) };
+      };
+
+      // A wide block reaches down the ramp towards the toe, where the flank is
+      // too short to carry it. Shrinking the block pulls it back over the tall
+      // part, which makes more room, which is self-correcting -- so walk the
+      // size down and take the largest that actually fits.
+      var pxA = Math.min((hiCap - lo) / rowsTot, spanW * 0.9 / units);
+      var px = 0, hi = 0, mid = 0;
+      for (q = 0; q < 24; q++) {
+        var trial = pxA * Math.pow(0.88, q);
+        if (trial < 1.0) break;             // finer than this will not print
+        var rq = roomFor(units * trial);
+        if (rq.hi - lo >= rowsTot * trial) { px = trial; hi = rq.hi; mid = rq.mid; break; }
+      }
+      if (px <= 0) return finishRects(p, out);
+
       var base = lo + ((hi - lo) - rowsTot * px) / 2;
-      var mid = (span[0] + span[1]) / 2;
 
       words.forEach(function (w, li) {
         var x0 = mid - ((w.length * 6 - 1) * px) / 2;
@@ -978,8 +1000,8 @@
   // Filament from the actual shell the slicer will lay down, not a flat fudge
   // factor: top/bottom skins over their own areas, perimeters over the walls,
   // infill through whatever volume is left.
-  var PRINT = { layer: 0.28, topLayers: 6, botLayers: 4, walls: 3, lineW: 0.42,
-                infill: 0.15, density: 1.24e-3, flow: 8, plateMins: 6, plates: 0 };
+  var PRINT = { layer: 0.28, topLayers: 10, botLayers: 4, walls: 3, lineW: 0.42,
+                infill: 0.25, density: 1.24e-3, flow: 8, plateMins: 6, plates: 0 };
 
   // Time is extruded volume over an average throughput, plus a fixed cost per
   // plate for heat-up, levelling and purge. `flow` is the one number that

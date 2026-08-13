@@ -293,24 +293,45 @@ function text_span() =
     len(iv) == 0 ? [0, hill_length]
     : [for (v = iv) if (prof_x((v[0] + v[1]) / 2) >= best - 1e-9) v][0];
 
+// Where the block lands, given its width: over the tallest part of the run,
+// pulled back far enough to sit inside it.
+function letter_mid(w, sp, peak) = min(max(peak, sp[0] + w / 2), sp[1] - w / 2);
+
+// How much flank is available under the block itself. Measuring the whole run
+// instead judges a short ramp by its toe and sizes the text out of existence.
+function letter_hi(w, sp, peak) =
+    let (mid = letter_mid(w, sp, peak),
+         hmin = min([for (k = [0 : 12]) prof_x(mid - w / 2 + w * k / 12)]),
+         dfold = bevel_run * max(0, min(1, (hmin - edge_lip)
+                                        / max(1e-6, hill_height - edge_lip))))
+    min(bevel_run * 0.82, dfold - 2);
+
 function decal_letters() =
     (decal != "text" && decal != "both") ? []
     : let (ws = decal_words(), nl = len(ws))
       nl == 0 ? []
       : let (sp = text_span(),
+             span_w = sp[1] - sp[0],
              lo = (decal == "both") ? bevel_run * 0.36 : bevel_run * 0.26,
-             hmin = min([for (q = [0 : 8]) prof_x(sp[0] + (sp[1] - sp[0]) * (0.1 + 0.1 * q))]),
-             dfold = bevel_run * max(0, min(1, (hmin - edge_lip)
-                                            / max(1e-6, hill_height - edge_lip))),
-             hi = min(bevel_run * 0.82, dfold - 2))
-        (hi - lo < 6) ? []
-        : let (gap = 2,
-               rows_tot = nl * 7 + (nl - 1) * gap,
-               widest = max([for (w = ws) len(w)]),
-               pxu = min((hi - lo) / rows_tot, (sp[1] - sp[0]) * 0.9 / (widest * 6 - 1)),
-               base = lo + ((hi - lo) - rows_tot * pxu) / 2,
-               mid = (sp[0] + sp[1]) / 2)
-          [for (li = [0 : nl - 1], k = [0 : len(ws[li]) - 1], r = [0 : 6], c = [0 : 4])
+             gap = 2,
+             rows_tot = nl * 7 + (nl - 1) * gap,
+             units = max([for (w = ws) len(w)]) * 6 - 1,
+             hs = [for (q = [0 : 40]) [prof_x(sp[0] + span_w * q / 40),
+                                       sp[0] + span_w * q / 40]],
+             peak = [for (h = hs) if (h[0] >= max([for (g = hs) g[0]]) - 1e-9) h[1]][0],
+             // A wide block reaches down towards the toe, where the flank is too
+             // short to carry it. Shrinking it pulls it back over the tall part,
+             // which makes more room -- so walk the size down and take the
+             // largest that actually fits.
+             pxa = min((bevel_run * 0.82 - lo) / rows_tot, span_w * 0.9 / units),
+             fits = [for (q = [0 : 23]) let (t = pxa * pow(0.88, q))
+                       if (t >= 1.0 && letter_hi(units * t, sp, peak) - lo >= rows_tot * t) t],
+             pxu = len(fits) == 0 ? 0 : fits[0])
+        pxu <= 0 ? []
+        : let (hi = letter_hi(units * pxu, sp, peak),
+               mid = letter_mid(units * pxu, sp, peak),
+               base = lo + ((hi - lo) - rows_tot * pxu) / 2)
+    [for (li = [0 : nl - 1], k = [0 : len(ws[li]) - 1], r = [0 : 6], c = [0 : 4])
              if (decal_glyph(ws[li][k])[6 - r][c] == "#")
                let (x0 = mid - ((len(ws[li]) * 6 - 1) * pxu) / 2,
                     yl = base + (nl - 1 - li) * (7 + gap) * pxu)
