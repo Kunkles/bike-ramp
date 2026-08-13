@@ -24,6 +24,7 @@ page = (HERE / "page.html").read_text()
 for token, text in [
     ("{{CSS}}", (HERE / "style.css").read_text()),
     ("{{GEOM}}", (HERE / "geom.js").read_text()),
+    ("{{DECK}}", (HERE / "deck.js").read_text()),
     ("{{APP}}", (HERE / "app.js").read_text()),
     ("{{SCAD}}", json.dumps((ROOT / "bikeramp.scad").read_text())),
 ]:

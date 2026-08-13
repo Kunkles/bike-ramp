@@ -1,6 +1,7 @@
 (function () {
   'use strict';
   var BR = window.BikeRamp;
+  var DK = window.BikeRampDeck;
 
   // ------------------------------------------------------------------ state --
   var state = null, result = null;
@@ -59,6 +60,7 @@
     bedY: PRINTERS[0].y - BED_MARGIN,
     flow: PRINTERS[0].flow,
     spikeLen: 6, infill: 0.25, ams: false, mode: 'assembled', isolate: null,
+    build: 'solid',                 // 'solid' | 'deck'
     colours: ['#FF2E88', '#25E3D8', '#FFE14D', '#1A1728'],
     paint: 0
   });
@@ -139,11 +141,34 @@
   };
 
   // ------------------------------------------------------------- geometry ---
-  function rebuild() {
-    result = BR.build(state);
-    result.estimate = BR.estimate(result.total, {
-      infill: state.infill, flow: state.flow, plates: result.tiles.length
+  // Deck-on-ribs. Only the ribs and thresholds are printed; the plywood is
+  // drawn so the ramp reads as the finished thing rather than a bare frame.
+  function rebuildDeck() {
+    var d = DK.build({ hillLength: state.hillLength, hillWidth: state.hillWidth,
+                       hillHeight: state.hillHeight, humps: state.humps });
+    var ps = DK.parts(d);
+    var tiles = ps.map(function (q, i) {
+      return { name: q.name, tris: q.tris, i: i, j: 0, ci: q.ci, flat: true,
+               sheet: !!q.sheet, m: BR.measure(q.tris) };
     });
+    var e = DK.estimate(d, { infill: state.infill, flow: state.flow });
+    result = {
+      params: Object.assign({}, state, d.params), deck: d, tiles: tiles,
+      tiling: { nx: tiles.length, ny: 1, px: d.params.hillLength, py: d.params.hillWidth },
+      total: BR.measure(d.ribs.length ? d.ribs[0].placed : d.sheetTris),
+      spikes: 0, estimate: e
+    };
+  }
+
+  function rebuild() {
+    if (state.build === 'deck') {
+      rebuildDeck();
+    } else {
+      result = BR.build(state);
+      result.estimate = BR.estimate(result.total, {
+        infill: state.infill, flow: state.flow, plates: result.tiles.length
+      });
+    }
     applyVisibility();
     syncShape();
     if (paintSync) paintSync();
@@ -194,11 +219,14 @@
         var ux=bx-ax,uy=by-ay,uz=bz-az,vx=cx-ax,vy=cy-ay,vz=cz-az;
         var fx=uy*vz-uz*vy, fy=uz*vx-ux*vz, fz=ux*vy-uy*vx;
         var m = Math.hypot(fx,fy,fz) || 1;
-        var smooth = fz / m > 0.15;
+        var smooth = fz / m > 0.15 && !t.flat;
         var mx = (ax + bx + cx) / 3, my = (ay + by + cy) / 3;
-        // by plan position, so a raised letter carries its own colour down its
-        // sides as well as across its face
-        var ci = regionAt(p, mx, my);
+        // By plan position, so a raised letter carries its own colour down its
+        // sides as well as across its face. Downward faces are excluded: the
+        // lookup has no z, so without this the flat underside picks up the
+        // pattern of whatever decal happens to sit above it.
+        var ci = t.ci != null ? t.ci
+               : fz / m < -0.15 ? 0 : regionAt(p, mx, my);
         for (var v = 0; v < 3; v++) {
           var x=tr[k+v*3], y=tr[k+v*3+1], z=tr[k+v*3+2];
           if (smooth) topNormal(p, x, y, mx, my, nrm);
@@ -370,8 +398,12 @@
         g.useProgram(prog);
         g.uniformMatrix4fv(g.getUniformLocation(prog, 'uMVP'), false, m);
         var cols = new Float32Array(12);
+        // In deck mode index 1 is the plywood, not a decal colour.
+        var pal = state.build === 'deck'
+          ? [state.colours[0], '#8A5A2E', state.colours[2], state.colours[3]]
+          : state.colours;
         for (var q = 0; q < 4; q++) {
-          var n = parseInt(state.colours[q].slice(1), 16);
+          var n = parseInt(pal[q].slice(1), 16);
           cols[q*3] = (n>>16&255)/255; cols[q*3+1] = (n>>8&255)/255;
           cols[q*3+2] = (n&255)/255;
         }
@@ -434,7 +466,40 @@
   function slopeWord(d) {
     return d < 9 ? 'very gentle' : d < 15 ? 'gentle' : d < 21 ? 'moderate' : 'steep for a toddler';
   }
+  function deckReadouts() {
+    var r = result, e = r.estimate, d = r.deck;
+    var printed = r.tiles.filter(function (t) { return !t.sheet; });
+    var big = printed.reduce(function (m, t) {
+      return t.m.size[2] > m.m.size[2] ? t : m; }, printed[0]);
+    var sl = 0, L = d.params.hillLength, q;
+    for (q = 0; q <= 200; q++) {
+      var x = L * q / 200, g = (DK.prof(d.params, x + 0.5) - DK.prof(d.params, x - 0.5)) / 1;
+      sl = Math.max(sl, Math.abs(Math.atan(g) * 180 / Math.PI));
+    }
+    $('#ro-tiles-label').textContent = 'Printed parts';
+    $('#ro-tiles').innerHTML = printed.length +
+      '<span class="sub">' + d.ribs.length + ' ribs + 2 ends</span>';
+    $('#ro-largest-label').textContent = 'Tallest rib';
+    $('#ro-largest').innerHTML = big.m.size.map(function (v) { return Math.round(v); })
+      .join(' \u00d7 ') + '<span class="sub">mm</span>';
+    $('#ro-slope-label').textContent = 'Max slope';
+    $('#ro-slope').innerHTML = sl.toFixed(1) + '\u00b0' +
+      '<span class="sub">' + slopeWord(sl) + '</span>';
+    $('#ro-filament').innerHTML = (e.grams / 1000).toFixed(2) +
+      '<span class="sub">kg</span>';
+    $('#ro-time').innerHTML = '\u2248' + Math.round(e.hours) + '<span class="sub">h</span>';
+    $('#ro-spikes-label').textContent = 'Plywood';
+    $('#ro-spikes').innerHTML = Math.round(d.sheet.length) + '\u00d7' +
+      Math.round(d.sheet.width) + '<span class="sub">\u00d7 1/8 in</span>';
+    $('#vp-dims').textContent = Math.round(d.params.hillLength) + ' \u00d7 ' +
+      Math.round(d.params.hillWidth) + ' \u00d7 ' + Math.round(d.params.hillHeight) + ' mm';
+  }
+
   function renderReadouts() {
+    if (state.build === 'deck') { deckReadouts(); return; }
+    $('#ro-tiles-label').textContent = 'Tiles';
+    $('#ro-largest-label').textContent = 'Largest tile';
+    $('#ro-spikes-label').textContent = 'Spikes';
     var r = result, b = r.biggest.m.size, e = r.estimate;
     var over = Math.max(b[0], b[1]) - r.params.maxPrint;
     $('#ro-tiles').innerHTML = r.tiles.length +
@@ -465,8 +530,8 @@
       b.setAttribute('aria-pressed', String(state.isolate === t.name));
       b.appendChild(el('span', 'n', t.name.replace('tile_', '')));
       b.appendChild(el('span', 'd', t.m.size.map(function (v) { return Math.round(v); })
-        .join('\u00d7') + '  ' +
-        Math.round(BR.estimate(t.m, { infill: state.infill }).grams) + 'g'));
+        .join('\u00d7') + '  ' + (t.sheet ? 'plywood'
+          : Math.round(BR.estimate(t.m, { infill: state.infill }).grams) + 'g')));
       b.addEventListener('click', function () {
         state.isolate = state.isolate === t.name ? null : t.name;
         renderTiles(); gl.upload(buildBuffers()); draw();
@@ -602,6 +667,7 @@
   function spikeGroup() {
     var host = document.createDocumentFragment();
     var sg = el('div', 'group');
+    sg.id = 'grp-spikes';
     sg.appendChild(el('h2', null, 'Ground spikes'));
     var schips = el('div', 'chips');
     SPIKE_OPTS.forEach(function (o) {
@@ -695,6 +761,7 @@
     });
 
     var dg = el('div', 'group');
+    dg.id = 'grp-decal';
     dg.appendChild(el('h2', null, 'Decals'));
     var dchips = el('div', 'chips');
     var trow = el('div', 'ctrl');
@@ -756,6 +823,7 @@
     dg.appendChild(ag);
 
     var fg = el('div', 'group');
+    fg.id = 'grp-colour';
     fg.appendChild(el('h2', null, 'Filament colours'));
     var pchips = el('div', 'chips');
     var sw = el('div', 'swatches');
@@ -821,8 +889,11 @@
     host.appendChild(ag);
 
     var f = el('p', 'foot');
-    f.innerHTML = 'Slice with 3 walls, 6 top / 4 bottom layers, gyroid infill, ' +
-      'no supports, a 5&nbsp;mm brim. <strong>PLA indoors only</strong> \u2014 it sags ' +
+    f.innerHTML = 'Slice with 3 walls, <strong>10 top</strong> / 4 bottom layers, ' +
+      '<strong>25% gyroid</strong>, no supports, a 5&nbsp;mm brim. The high top ' +
+      'shell is not optional: the low end of the ramp is nearly flat over sparse ' +
+      'infill and pinholes in the skin at the usual 6 / 15%. ' +
+      '<strong>PLA indoors only</strong> \u2014 it sags ' +
       'in a hot garage or a sunny car; use PETG or ASA outdoors.';
     host.appendChild(f);
 
@@ -842,11 +913,20 @@
     });
   }
   // Controls that only mean something for one shape are hidden for the others.
+  // A rib frame has no tiles, no dovetails and no flanks, so the controls that
+  // describe those are hidden rather than left to do nothing.
+  var SOLID_ONLY = { bevelRun:1, edgeLip:1, fit:1, deck:1 };
   function applyVisibility() {
+    var deck = state.build === 'deck';
     CONTROLS.forEach(function (g) {
       g.items.forEach(function (it) {
-        if (it._el) it._el.style.display = !it.show || it.show() ? '' : 'none';
+        var on = (!it.show || it.show()) && !(deck && SOLID_ONLY[it.k]);
+        if (it._el) it._el.style.display = on ? '' : 'none';
       });
+    });
+    ['#grp-spikes', '#grp-decal', '#grp-colour'].forEach(function (sel) {
+      var n = document.querySelector(sel);
+      if (n) n.style.display = deck ? 'none' : '';
     });
   }
   function markPreset() {
@@ -950,11 +1030,67 @@
     ] : [])).join('\n');
   }
 
+  function deckReadme() {
+    var d = result.deck, p = d.params, e = result.estimate;
+    return [
+      'LITTLE RIPPER -- plywood deck ramp',
+      '',
+      p.hillLength + ' x ' + p.hillWidth + ' x ' + p.hillHeight + ' mm, ' +
+        p.humps + ' hump(s).',
+      'Printed: ' + (e.grams / 1000).toFixed(2) + ' kg, about ' +
+        Math.round(e.hours) + ' h.',
+      '',
+      'PLYWOOD',
+      '  One piece, ' + Math.round(d.sheet.length) + ' x ' +
+        Math.round(d.sheet.width) + ' mm, 1/8 in (3.2 mm).',
+      '  Grain along the length so it bends over the humps.',
+      '',
+      'PRINT',
+      '  ' + d.ribs.length + ' ribs, all different heights -- not interchangeable.',
+      '  2 thresholds from threshold_x2.stl.',
+      '  Stand the ribs on edge as oriented, so screws drive into the layers',
+      '  rather than between them. Brim them; they are thin walls.',
+      '  3 walls, 25% gyroid, 6 top layers. These are not riding surfaces.',
+      '',
+      'ASSEMBLE',
+      '  Mark rib centrelines on the underside of the ply, from one end (mm):',
+      '    ' + d.ribs.map(function (b) { return Math.round(b.x); }).join(', '),
+      '  Ribs go tallest at the crests, descending outward.',
+      '  Bend the ply over them and screw down from the crests outward.',
+      '  ' + p.screwsPerRib + ' screws per rib at ' +
+        d.screwY.map(function (v) { return Math.round(v); }).join(' / ') +
+        ' mm across.',
+      '  Drill a 2.5 mm pilot through ply AND into the rib -- 8 mm of PLA will',
+      '  split if you drive a screw dry. #6 x 1/2 in pan head.',
+      '  Fit a threshold at each end over the ply edge.',
+      '',
+      'CHECK BEFORE RIDING',
+      '  Stand on a crest: more than ~3 mm sag means thin ply or a shifted rib.',
+      '  Every rib bearing; no rattle when you press between them.',
+      '  No step at either threshold -- that is where a wheel catches.',
+      '  Screw heads flush. Ease the exposed ply edges with sandpaper.',
+      ''
+    ].join('\n');
+  }
+
   function downloadZip() {
+    var enc = new TextEncoder();
+    if (state.build === 'deck') {
+      var d = result.deck;
+      var df = d.ribs.map(function (b) {
+        var m = BR.measure(b.tris);
+        return { name: b.name + '.stl', data: BR.stlBinary(b.tris, m.min) };
+      });
+      var tm = BR.measure(d.threshold.tris);
+      df.push({ name: 'threshold_x2.stl',
+                data: BR.stlBinary(d.threshold.tris, tm.min) });
+      df.push({ name: 'README.txt', data: enc.encode(deckReadme()) });
+      save(BR.zip(df), slug() + '-deck.zip');
+      return;
+    }
     var files = result.tiles.map(function (t) {
       return { name: t.name + '.stl', data: BR.stlBinary(t.tris, t.m.min) };
     });
-    var enc = new TextEncoder();
     if (state.spikeLen && result.spikes)
       files.push({ name: 'spike_x' + result.spikes + '.stl',
                    data: BR.stlBinary(BR.spikeMesh(state), [0, 0, 0]) });
@@ -1003,6 +1139,17 @@
         'The controls and downloads still work.</p>';
       return;
     }
+    document.querySelectorAll('[data-build]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (state.build === b.dataset.build) return;
+        state.build = b.dataset.build;
+        state.isolate = null;
+        document.querySelectorAll('[data-build]').forEach(function (o) {
+          o.setAttribute('aria-pressed', String(o === b));
+        });
+        rebuild();
+      });
+    });
     document.querySelectorAll('[data-mode]').forEach(function (b) {
       b.addEventListener('click', function () {
         var was = state.mode;

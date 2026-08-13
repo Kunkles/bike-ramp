@@ -13,13 +13,18 @@
   </aside>
 
   <main class="main">
+    <div class="chips build-tabs" id="build-tabs">
+      <button class="chip" type="button" data-build="solid" aria-pressed="true">Solid print</button>
+      <button class="chip" type="button" data-build="deck" aria-pressed="false">Plywood deck</button>
+    </div>
+
     <dl class="readouts">
-      <div class="ro"><dt>Tiles</dt><dd id="ro-tiles">&mdash;</dd></div>
-      <div class="ro"><dt>Largest tile</dt><dd id="ro-largest">&mdash;</dd></div>
+      <div class="ro"><dt id="ro-tiles-label">Tiles</dt><dd id="ro-tiles">&mdash;</dd></div>
+      <div class="ro"><dt id="ro-largest-label">Largest tile</dt><dd id="ro-largest">&mdash;</dd></div>
       <div class="ro"><dt id="ro-slope-label">Max slope</dt><dd id="ro-slope">&mdash;</dd></div>
       <div class="ro"><dt>Filament</dt><dd id="ro-filament">&mdash;</dd></div>
       <div class="ro"><dt>Print time</dt><dd id="ro-time">&mdash;</dd></div>
-      <div class="ro"><dt>Spikes</dt><dd id="ro-spikes">&mdash;</dd></div>
+      <div class="ro"><dt id="ro-spikes-label">Spikes</dt><dd id="ro-spikes">&mdash;</dd></div>
     </dl>
 
     <div class="vp" id="vp">
@@ -44,5 +49,6 @@
 </div>
 
 <script>{{GEOM}}</script>
+<script>{{DECK}}</script>
 <script>window.SCAD_SOURCE = {{SCAD}};</script>
 <script>{{APP}}</script>
