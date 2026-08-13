@@ -3164,6 +3164,56 @@ input[type=range]::-moz-range-thumb {
     ] : [])).join('\n');
   }
 
+  // The plywood is the one part you cut rather than print, so it gets its own
+  // file with the size in the filename -- visible in the zip listing without
+  // opening anything.
+  function deckCutSheet() {
+    var d = result.deck, p2 = d.params;
+    var mm = function (v) { return Math.round(v); };
+    var inch = function (v) { return (v / 25.4).toFixed(2); };
+    var L = d.sheet.length, W = d.sheet.width;
+    // raised cosine of height H and wavelength lam has crest radius
+    // R = lam^2 / (2 pi^2 H); strain in a sheet of thickness t is t / 2R
+    var lam = p2.hillLength / Math.max(1, p2.humps);
+    var crestR = lam * lam / (2 * Math.PI * Math.PI * Math.max(1, p2.hillHeight));
+    return [
+      'PLYWOOD CUT LIST -- Little Ripper deck ramp',
+      '',
+      '  ONE PIECE:  ' + mm(L) + ' x ' + mm(W) + ' mm',
+      '              ' + inch(L) + ' x ' + inch(W) + ' in',
+      '  THICKNESS:  1/8 in (3.2 mm).',
+      '',
+      '  This ramp bends to a ' + mm(crestR) + ' mm radius at the crest. Dry ply',
+      '  takes about 0.5% strain before the outer veneer checks, so the most it',
+      '  will bend here is ' + (crestR / 100).toFixed(1) + ' mm thick. 1/4 in ' +
+        (6.35 <= crestR / 100 ? 'would also make it' : 'will crack') + '.',
+      '',
+      '  Grain must run along the ' + mm(L) + ' mm length, or it will not bend',
+      '  over the humps without cracking.',
+      '',
+      '  Cut it 10-20 mm long and trim after bending -- the sheet takes up a',
+      '  little length as it curves.',
+      '',
+      'MARKING THE UNDERSIDE',
+      '',
+      '  Rib centrelines, measured from one end (mm):',
+      '    ' + d.ribs.map(function (b) { return mm(b.x); }).join(', '),
+      '',
+      '  In inches from the same end:',
+      '    ' + d.ribs.map(function (b) { return inch(b.x); }).join(', '),
+      '',
+      '  Screw lines across the width, from one edge (mm):',
+      '    ' + d.screwY.map(mm).join(', '),
+      '',
+      '  Three screws per rib, on the crossings of those two sets of lines.',
+      '  Drill 2.5 mm pilots through the ply AND into the rib. #8 x 3/4 in.',
+      '',
+      '  The rib spacing is not even across the sheet: near the troughs the',
+      '  deck comes down onto the base ladder and needs no rib.',
+      ''
+    ].join('\n');
+  }
+
   function deckReadme() {
     var d = result.deck, p = d.params, e = result.estimate;
     return [
@@ -3215,9 +3265,16 @@ input[type=range]::-moz-range-thumb {
         var m = BR.measure(b.tris);
         return { name: b.name + '.stl', data: BR.stlBinary(b.tris, m.min) };
       });
+      d.strips.forEach(function (b) {
+        var bm = BR.measure(b.tris);
+        df.push({ name: b.name + '.stl', data: BR.stlBinary(b.tris, bm.min) });
+      });
       var tm = BR.measure(d.threshold.tris);
       df.push({ name: 'threshold_x2.stl',
                 data: BR.stlBinary(d.threshold.tris, tm.min) });
+      df.push({ name: 'PLYWOOD-CUT-' + Math.round(d.sheet.length) + 'x' +
+                      Math.round(d.sheet.width) + 'mm.txt',
+                data: enc.encode(deckCutSheet()) });
       df.push({ name: 'README.txt', data: enc.encode(deckReadme()) });
       save(BR.zip(df), slug() + '-deck.zip');
       return;
