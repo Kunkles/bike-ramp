@@ -1207,7 +1207,7 @@
               decalRects: decalRects, reliefAt: reliefAt, decalBody: decalBody,
               decalLevels: decalLevels,
               threadCrest: threadCrest,
-              xseamTabs: xseamTabs, yseamTabs: yseamTabs };
+              xseamTabs: xseamTabs, yseamTabs: yseamTabs, FONT: FONT };
 
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.BikeRamp = api;

@@ -61,6 +61,7 @@
     flow: PRINTERS[0].flow,
     spikeLen: 6, infill: 0.25, ams: false, mode: 'assembled', isolate: null,
     build: 'solid',                 // 'solid' | 'deck'
+    bike: true,                     // scale reference in the viewport
     colours: ['#FF2E88', '#25E3D8', '#FFE14D', '#1A1728'],
     paint: 0
   });
@@ -140,6 +141,142 @@
     return n;
   };
 
+  // ------------------------------------------------------------------ bike --
+  // A Strider 12 Comp, to scale, so the ramp is read against the thing that has
+  // to ride it. Real numbers: 12 in wheels (305 mm), 550 mm wheelbase. It is
+  // posed on the ramp itself, wheels riding the surface envelope, because that
+  // is what shows how little of a short hump the bike actually feels.
+  var BIKE = { wheelR: 152.5, wheelW: 34, base: 550, hub: 0 };
+
+  function bikeBox(m, a, b, w, half) {
+    // a and b are [x,z] in the bike's own side view; w is the tube width in y
+    var dx = b[0]-a[0], dz = b[1]-a[1], L = Math.hypot(dx,dz) || 1;
+    var nx = -dz/L*half, nz = dx/L*half;
+    var c = [[a[0]-nx,a[1]-nz],[b[0]-nx,b[1]-nz],[b[0]+nx,b[1]+nz],[a[0]+nx,a[1]+nz]];
+    var y0 = -w/2, y1 = w/2, i;
+    for (i = 1; i + 1 < 4; i++) {
+      m.tri([c[0][0],y0,c[0][1]], [c[i+1][0],y0,c[i+1][1]], [c[i][0],y0,c[i][1]]);
+      m.tri([c[0][0],y1,c[0][1]], [c[i][0],y1,c[i][1]], [c[i+1][0],y1,c[i+1][1]]);
+    }
+    for (i = 0; i < 4; i++) {
+      var j = (i+1)%4;
+      m.quad([c[i][0],y0,c[i][1]], [c[j][0],y0,c[j][1]],
+             [c[j][0],y1,c[j][1]], [c[i][0],y1,c[i][1]]);
+    }
+  }
+  function bikeWheel(m, cx, cz, r, w) {
+    var N = 28, i, y0 = -w/2, y1 = w/2;
+    for (i = 0; i < N; i++) {
+      var a = i/N*Math.PI*2, b = (i+1)/N*Math.PI*2;
+      var p0 = [cx+Math.cos(a)*r, cz+Math.sin(a)*r];
+      var p1 = [cx+Math.cos(b)*r, cz+Math.sin(b)*r];
+      m.tri([cx,y0,cz], [p1[0],y0,p1[1]], [p0[0],y0,p0[1]]);
+      m.tri([cx,y1,cz], [p0[0],y1,p0[1]], [p1[0],y1,p1[1]]);
+      m.quad([p0[0],y0,p0[1]], [p1[0],y0,p1[1]], [p1[0],y1,p1[1]], [p0[0],y1,p0[1]]);
+    }
+  }
+  function meshOf() {
+    var t = [];
+    return { tris:t,
+      tri:function(a,b,c){ t.push(a[0],a[1],a[2],b[0],b[1],b[2],c[0],c[1],c[2]); },
+      quad:function(a,b,c,d){ this.tri(a,b,c); this.tri(a,c,d); } };
+  }
+
+  // "STRIDER 12 COMP" along the top tube, as raised pixels off the same 5x7
+  // font the ramp decals use -- so it is legible about which bike this is.
+  function bikeLabel(m, a, b, w) {
+    var txt = 'STRIDER 12 COMP', F = BR.FONT;
+    var chars = txt.split('').filter(function (c) { return c === ' ' || F[c]; });
+    var units = chars.length * 6 - 1;
+    var dx = b[0]-a[0], dz = b[1]-a[1], L = Math.hypot(dx,dz) || 1;
+    var ux = dx/L, uz = dz/L;               // along the tube
+    var px = Math.min(L * 0.92 / units, 3.4);
+    var run = units * px, x0 = a[0] + ux*(L-run)/2, z0 = a[1] + uz*(L-run)/2;
+    var lift = 9;                            // sit the cap height on the tube
+    chars.forEach(function (ch, k) {
+      if (ch === ' ') return;
+      var rows = F[ch];
+      for (var r = 0; r < 7; r++) for (var c = 0; c < 5; c++) {
+        if (rows[6-r].charAt(c) !== '#') continue;
+        var d = (k*6 + c) * px;
+        var cx = x0 + ux*d - uz*(lift + r*px);
+        var cz = z0 + uz*d + ux*(lift + r*px);
+        var ex = ux*px, ez = uz*px;
+        var fx = -uz*px, fz = ux*px;
+        var q = [[cx,cz],[cx+ex,cz+ez],[cx+ex+fx,cz+ez+fz],[cx+fx,cz+fz]];
+        var y0v = w/2, y1v = w/2 + 1.2, i;
+        for (i = 1; i+1 < 4; i++) {
+          m.tri([q[0][0],y0v,q[0][1]], [q[i+1][0],y0v,q[i+1][1]], [q[i][0],y0v,q[i][1]]);
+          m.tri([q[0][0],y1v,q[0][1]], [q[i][0],y1v,q[i][1]], [q[i+1][0],y1v,q[i+1][1]]);
+        }
+        for (i = 0; i < 4; i++) {
+          var j = (i+1)%4;
+          m.quad([q[i][0],y0v,q[i][1]], [q[j][0],y0v,q[j][1]],
+                 [q[j][0],y1v,q[j][1]], [q[i][0],y1v,q[i][1]]);
+        }
+      }
+    });
+  }
+
+  // Highest the wheel can sit without cutting into the surface -- the same
+  // envelope a real wheel rolls on, so it bridges crests instead of dipping in.
+  function surfaceAt(x) {
+    if (state.build === 'deck') {
+      var d = result.deck, L = d.params.hillLength;
+      if (x < 0 || x > L) return 0;
+      return Math.max(d.params.baseH, window.BikeRampDeck.ribTop(d.params, x))
+             + d.params.sheet;
+    }
+    var p = result.params;
+    if (x < 0 || x > p.hillLength) return 0;
+    return BR.profX(p, x);
+  }
+  function wheelCentre(xc) {
+    var r = BIKE.wheelR, best = r, d;
+    for (d = -r; d <= r; d += 4) {
+      var z = surfaceAt(xc + d) + Math.sqrt(Math.max(0, r*r - d*d));
+      if (z > best) best = z;
+    }
+    return best;
+  }
+
+  function bikeMesh() {
+    var m = meshOf(), lm = meshOf();
+    var L = (state.build === 'deck' ? result.deck.params.hillLength : state.hillLength);
+    var xr = Math.max(0, L * 0.5 - BIKE.base * 0.5);      // straddling the middle
+    var zr = wheelCentre(xr), zf = wheelCentre(xr + BIKE.base);
+    var ang = Math.atan2(zf - zr, BIKE.base);
+    var ca = Math.cos(ang), sa = Math.sin(ang);
+    var R = BIKE.wheelR;
+    // side view in bike-local coords: rear axle at origin
+    var rear = [0, 0], front = [BIKE.base, 0];
+    var seat = [150, 150], head = [455, 205], bar = [470, 300], sadd = [140, 235];
+    var frame = meshOf();
+    bikeWheel(frame, rear[0], rear[1], R, BIKE.wheelW);
+    bikeWheel(frame, front[0], front[1], R, BIKE.wheelW);
+    bikeBox(frame, rear, seat, 22, 11);                    // rear stay
+    bikeBox(frame, seat, head, 30, 15);                    // top tube -- the label
+    bikeBox(frame, head, front, 22, 11);                   // fork
+    bikeBox(frame, head, bar, 20, 10);                     // steerer
+    bikeBox(frame, seat, sadd, 20, 10);                    // seat post
+    bikeBox(frame, [sadd[0]-80, sadd[1]], [sadd[0]+70, sadd[1]+8], 60, 12); // saddle
+    var handle = meshOf();
+    bikeBox(handle, [bar[0], bar[1]], [bar[0], bar[1]+6], 300, 14);         // bars
+    bikeLabel(lm, seat, head, 30);
+
+    function place(src, out) {
+      for (var i = 0; i < src.length; i += 3) {
+        var x = src[i], y = src[i+1], z = src[i+2];
+        out.push(xr + x*ca - z*sa, y + state.hillWidth/2, zr + x*sa + z*ca);
+      }
+    }
+    var body = [], label = [];
+    place(frame.tris, body); place(handle.tris, body);
+    place(lm.tris, label);
+    return [{ name:'strider 12 comp', tris:body, ci:4, flat:true, ghost:true },
+            { name:'bike label', tris:label, ci:5, flat:true, ghost:true }];
+  }
+
   // ------------------------------------------------------------- geometry ---
   // Deck-on-ribs. Only the ribs and thresholds are printed; the plywood is
   // drawn so the ramp reads as the finished thing rather than a bare frame.
@@ -179,14 +316,16 @@
   }
 
   function tileOffset(t) {
-    if (state.mode !== 'exploded') return [0, 0, 0];
+    if (state.mode !== 'exploded' || t.ghost) return [0, 0, 0];
     var g = 55, tl = result.tiling;
     return [(t.i - (tl.nx - 1) / 2) * g, (t.j - (tl.ny - 1) / 2) * g, 0];
   }
 
   function visibleTiles() {
-    return state.isolate == null ? result.tiles
+    var base = state.isolate == null ? result.tiles
       : result.tiles.filter(function (t) { return t.name === state.isolate; });
+    return (state.bike && state.mode !== 'exploded')
+      ? base.concat(bikeMesh()) : base;
   }
 
   // Analytic surface normal, so the riding face shades smoothly while the cut
@@ -211,7 +350,10 @@
 
     tiles.forEach(function (t) {
       var off = tileOffset(t);
-      var shade = 1 - ((t.i + t.j) % 2) * (state.mode === 'exploded' ? 0.07 : 0.025);
+      // The bike is a reference object: no checkerboard shading, and it stays
+      // put when the parts explode.
+      var shade = t.ghost ? 1
+        : 1 - ((t.i + t.j) % 2) * (state.mode === 'exploded' ? 0.07 : 0.025);
       var tr = t.tris;
       for (var k = 0; k < tr.length; k += 9) {
         var ax=tr[k],ay=tr[k+1],az=tr[k+2],bx=tr[k+3],by=tr[k+4],bz=tr[k+5],
@@ -271,7 +413,7 @@
       '  gl_Position=uMVP*vec4(aPos,1.0); }';
     var FS = '#version 300 es\nprecision highp float;\n' +
       'in vec3 vN; in float vS; flat in int vCi;\n' +
-      'uniform vec3 uColor[4];\n' +
+      'uniform vec3 uColor[6];\n' +
       'out vec4 o;\n' +
       'void main(){\n' +
       '  vec3 n=normalize(vN);\n' +
@@ -397,12 +539,13 @@
 
         g.useProgram(prog);
         g.uniformMatrix4fv(g.getUniformLocation(prog, 'uMVP'), false, m);
-        var cols = new Float32Array(12);
+        var cols = new Float32Array(18);
         // In deck mode index 1 is the plywood, not a decal colour.
         var pal = state.build === 'deck'
           ? [state.colours[0], '#8A5A2E', state.colours[2], state.colours[3]]
           : state.colours;
-        for (var q = 0; q < 4; q++) {
+        pal = pal.concat(['#20202A', '#F2EFE4']);   // bike frame, bike label
+        for (var q = 0; q < 6; q++) {
           var n = parseInt(pal[q].slice(1), 16);
           cols[q*3] = (n>>16&255)/255; cols[q*3+1] = (n>>8&255)/255;
           cols[q*3+2] = (n&255)/255;
@@ -478,7 +621,8 @@
     }
     $('#ro-tiles-label').textContent = 'Printed parts';
     $('#ro-tiles').innerHTML = printed.length +
-      '<span class="sub">' + d.ribs.length + ' ribs + 2 ends</span>';
+      '<span class="sub">' + d.ribs.length + ' ribs, ' + d.strips.length +
+      ' base, 2 ends</span>';
     $('#ro-largest-label').textContent = 'Tallest rib';
     $('#ro-largest').innerHTML = big.m.size.map(function (v) { return Math.round(v); })
       .join(' \u00d7 ') + '<span class="sub">mm</span>';
@@ -524,7 +668,7 @@
   function renderTiles() {
     var box = $('#tiles');
     box.textContent = '';
-    result.tiles.forEach(function (t) {
+    result.tiles.filter(function (t) { return !t.ghost; }).forEach(function (t) {
       var b = el('button', 'tile');
       b.type = 'button';
       b.setAttribute('aria-pressed', String(state.isolate === t.name));
@@ -1139,6 +1283,12 @@
         'The controls and downloads still work.</p>';
       return;
     }
+    var bt = $('#bike-toggle');
+    if (bt) bt.addEventListener('click', function () {
+      state.bike = !state.bike;
+      bt.setAttribute('aria-pressed', String(state.bike));
+      gl.upload(buildBuffers()); draw();
+    });
     document.querySelectorAll('[data-build]').forEach(function (b) {
       b.addEventListener('click', function () {
         if (state.build === b.dataset.build) return;

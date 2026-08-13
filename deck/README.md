@@ -1,94 +1,99 @@
-# Plywood deck ramp — v1
+# Plywood deck ramp — v2
 
-A 1100 × 250 mm ramp, two humps, 35 mm tall, built as printed ribs under a
-bent 1/8" plywood deck.
+A 1100 × 250 mm ramp, two humps, 35 mm tall: a printed frame under a bent
+1/8" plywood deck.
 
 |  | printed | time |
 |---|---|---|
-| this | **0.30 kg** | **~6 h** |
+| this | **0.74 kg** | **~15 h** |
 | same ramp printed solid | 2.29 kg | 48 h |
 
-The saving is not cleverness about infill — it is that the sheet replaces the
-printed top skin, and on a solid ramp the top skin alone is 983 g.
+## What changed from v1, and why it got heavier
+
+v1 was 0.30 kg and it was wrong. It was ten loose plates that only became rigid
+once the plywood was screwed on, and it asked you to drive screws into an 8 mm
+printed edge — which splits, and strips the first time you take it apart.
+
+v2 adds the two things that were missing:
+
+- **A base ladder.** Two strips run the full length with a mortise under every
+  rib; each rib has matching feet. The frame stands square and holds its own
+  spacing before the ply goes anywhere near it.
+- **12 mm ribs**, up from 8, so a screw has real material either side of it.
+
+That is where the extra 0.44 kg went. It is the difference between a jig and a
+structure, and it is still 3× lighter and under a third of the time of solid.
 
 ## Why this geometry
 
-**Hump spacing is 550 mm because that is the Strider's wheelbase.** Both wheels
-then crest together and the whole bike lifts, so he feels ~97% of the 35 mm. A
-single 600 mm hump only delivers half its height, because when the front wheel
-is on the crest the rear is still on flat ground.
+**Hump spacing is 550 mm because that is the Strider 12's wheelbase.** Both
+wheels crest together and the whole bike lifts, so he feels ~97% of the 35 mm.
+A single 600 mm hump gives only half its height — when the front wheel is on the
+crest the rear is still on flat ground. Turn the bike on in the generator's
+viewport and you can see it spans the whole of a 600 mm ramp.
 
-**Do not stretch this to 1100 mm humps.** At twice the wheelbase one wheel sits
-in a trough while the other is on a crest, they cancel, and a big impressive
-ramp feels almost perfectly flat.
+**Don't stretch to 1100 mm humps.** At twice the wheelbase one wheel sits in a
+trough while the other is on a crest, they cancel, and it feels flat.
 
 **Ribs are 91.7 mm apart** — inside the 108 mm limit for 1/8" ply to stay under
-2 mm of sag with a 200 N wheel load, and chosen so a rib lands exactly on each
-crest, where both the load and the bend are worst.
+2 mm sag at a 200 N wheel load, and placed so a rib lands on each crest, where
+load and bend are worst.
 
-## Parts
+## Parts — 24 in total
 
-| file | size | qty | each |
-|---|---|---|---|
-| `rib_02`, `rib_07` | 250 × 8 × 32 mm | 1 each | 44 g |
-| `rib_01`, `rib_03`, `rib_06`, `rib_08` | 250 × 8 × 24 mm | 1 each | 34 g |
-| `rib_00`, `rib_04`, `rib_05`, `rib_09` | 250 × 8 × 7 mm | 1 each | 13 g |
-| `threshold_x2` | 250 × 25 × 3 mm | **2** | 12 g |
+| file | size | qty |
+|---|---|---|
+| `rib_01`, `rib_04` | 250 × 12 × 30 mm | 1 each |
+| `rib_00`, `rib_02`, `rib_03`, `rib_05` | 250 × 12 × 21 mm | 1 each |
+| `base_0L` … `base_7R` | 101–220 × 30 × 6 mm | 16 |
+| `threshold_x2` | 250 × 80 × 9 mm | **2** |
 
-Every rib is a different height — they are not interchangeable. Print them
-**standing on edge, as oriented**, so screws drive into the layers rather than
-between them. Use a brim; they are thin walls.
+Ribs are all different heights and are **not** interchangeable. Print them
+**standing on edge as oriented**, so ply screws drive into the layers rather
+than between them. Brim them. Base strips print flat.
 
-3 walls, 25% gyroid, 6 top layers. These are not riding surfaces, so they don't
-need the 10-layer top shell the solid ramp does.
-
-Three ribs are deliberately missing near the troughs — there the ramp is
-shallower than the ply is thick, so the sheet just lies on the ground.
+3 walls, 25% gyroid, 6 top layers — none of these is a riding surface.
 
 ## Plywood
 
-One piece, **1100 × 250 mm**, 1/8" (3.2 mm).
-
-Cut it slightly long and trim after bending. Grain should run **along** the
-1100 mm length so it bends over the humps.
+One piece, **1100 × 250 mm**, 1/8" (3.2 mm), grain along the length.
 
 ## Assembly
 
-1. Mark rib centrelines on the *underside* of the ply, measured from one end:
+1. Lay the base strips end to end in two lines. Joints fall midway between ribs
+   so a rib always pins them.
+2. Drop each rib's feet into its mortises. Rib stations from one end (mm):
+   **183, 275, 367, 733, 825, 917** — tallest at 275 and 825.
+   Ribs only exist where the deck is airborne. Near the troughs the sheet comes
+   down onto the base ladder itself, so there is nothing there to hold up; the
+   longest unsupported run works out at 87 mm, inside the 108 mm sag limit.
+3. Bend the ply over the frame and screw down **from the crests outward**.
+4. Three screws per rib at **20 / 125 / 230 mm** across. Drill a 2.5 mm pilot
+   through ply *and* into the rib. **#8 × 3/4"** pan head.
+5. Fit a threshold at each end and screw through it.
 
-   **92, 183, 275, 367, 458, 642, 733, 825, 917, 1008 mm**
+### If you want it to survive being taken apart
 
-   They are not evenly spaced across the whole sheet — the gap at 458→642
-   straddles the middle trough.
+Screws into PLA are fine once. If you expect to disassemble it, drill the rib
+tops 4.2 mm and fit **M4 heat-set inserts**, then use M4 machine screws. That is
+the difference between a joint that lasts one rebuild and one that lasts many.
 
-2. Lay the ribs on the ground on their marks, tallest (`rib_02`, `rib_07`) at
-   275 and 825. Ribs go in ascending-then-descending order out from each crest.
-3. Bend the ply over them and screw down, working **from the crests outward** so
-   the sheet is not fighting you.
-4. Three screws per rib, at 20 / 125 / 230 mm across the width. Drill a 2.5 mm
-   pilot **through the ply and into the rib** — 8 mm of PLA will split if you
-   drive a screw dry. #6 × 1/2" pan head.
-5. Fit a threshold at each end, over the ply edge, and screw through it.
+## Check before he rides it
 
-## What to check before he rides it
+1. **Stand on a crest.** More than ~3 mm sag means thin ply or a rib not seated.
+2. **Every rib bearing** — no rattle when you press between ribs.
+3. **No step at either threshold.** They climb the 6 mm base plus the 3.2 mm
+   sheet over an 80 mm run; that is the one place a wheel can catch.
+4. Screw heads flush; ease the exposed ply edges with sandpaper.
 
-1. **Stand on the crest.** More than ~3 mm of sag means the ply is thinner than
-   1/8", or a rib has shifted off its mark.
-2. **Check every rib is bearing.** A rib that isn't touching the ply does
-   nothing; the sheet should not rattle when you press between ribs.
-3. **Feel the thresholds.** No step at either end — that is the one place a
-   wheel can catch.
-4. **Nothing proud of the deck.** Every screw head fully countersunk or seated
-   flush.
+## Known limits
 
-## Known limits of v1
-
-- **The ply edges are exposed along both sides.** You asked for a hard dropoff
-  for the first version, so there are no side rails. Ease the edges with
-  sandpaper before he rides it.
-- **No ground spikes.** The solid ramp's threaded spikes don't attach to
-  anything here yet. On grass, stake the thresholds down.
-- **Ribs are loose until the deck is on.** The sheet is the structure — it ties
-  the ribs upright and holds their spacing. Don't judge the frame before it is
-  screwed together.
-- Not yet in the web generator; these were produced from `webapp/deck.js`.
+- **The ply edges are exposed along both sides** — you asked for a hard dropoff
+  in v1 and that still stands. No side rails yet.
+- **No ground spikes.** On grass, stake the thresholds.
+- **Untested in plastic.** The 108 mm rib spacing comes from a beam calculation
+  assuming 9 GPa plywood and a 200 N wheel load. Garage ply varies. Print two
+  ribs and a base strip, screw an offcut across them, and stand on it before
+  committing to the whole build.
+- Generated from `webapp/deck.js`; the solid path has an OpenSCAD cross-check
+  and this does not.
