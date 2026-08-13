@@ -1655,7 +1655,9 @@ input[type=range]::-moz-range-thumb {
     tenon: 4,             // mm, how far a rib foot drops into a strip
     fit: 0.25,            // mm, slop per side on tenon and mortise
     endRun: 80,           // mm, threshold run-in; it climbs the base too
-    bedX: 250             // mm, longest printable base segment
+    baseCount: 3,         // longitudinal strips across the width
+    bedX: 250,            // mm, usable bed -- caps the base segment length
+    bedY: 250
   };
 
   function prof(p, x) {
@@ -1735,7 +1737,20 @@ input[type=range]::-moz-range-thumb {
   // Sweep a section polygon along one axis. `map(u, v, w)` places a section
   // point (u,v) at sweep position w into world x/y/z.
   function extrude(poly, w0, w1, map) {
-    var e = earClip(poly), pts = e.pts, m = mesh(), i;
+    // Clipping a foot flush with a cut edge leaves a repeated vertex, which
+    // turns into zero-area faces and a non-manifold shell. Drop them first.
+    var clean = [], j;
+    for (j = 0; j < poly.length; j++) {
+      var q0 = poly[j], q1 = clean.length ? clean[clean.length - 1] : null;
+      if (q1 && Math.abs(q0[0] - q1[0]) < 1e-7 && Math.abs(q0[1] - q1[1]) < 1e-7) continue;
+      clean.push(q0);
+    }
+    while (clean.length > 2) {
+      var a0 = clean[0], b0 = clean[clean.length - 1];
+      if (Math.abs(a0[0] - b0[0]) < 1e-7 && Math.abs(a0[1] - b0[1]) < 1e-7) clean.pop();
+      else break;
+    }
+    var e = earClip(clean), pts = e.pts, m = mesh(), i;
     var A = pts.map(function (q) { return map(q[0], q[1], w0); });
     var B = pts.map(function (q) { return map(q[0], q[1], w1); });
     e.tris.forEach(function (t) {
@@ -1764,31 +1779,61 @@ input[type=range]::-moz-range-thumb {
 
   // Where the two base strips run along the length.
   function baseYs(p) {
-    var a = Math.max(12, p.hillWidth * 0.16);
-    return [[a, a + p.baseW], [p.hillWidth - a - p.baseW, p.hillWidth - a]];
+    var n = Math.max(2, p.baseCount || 3);
+    var a = Math.max(12, p.hillWidth * 0.10);
+    var travel = Math.max(0, p.hillWidth - 2 * a - p.baseW);
+    var out = [], i;
+    for (i = 0; i < n; i++) {
+      var s = a + travel * i / (n - 1);
+      out.push([s, s + p.baseW]);
+    }
+    return out;
   }
 
   // Rib section in the y-z plane, swept across the rib's thickness. The feet
   // drop through the base strips: a mortise and tenon, not a plate balanced on
   // edge. That is what fixes the spacing and stops the frame racking before
   // the plywood is anywhere near it.
-  function ribSection(p, h) {
-    var ys = baseYs(p), W = p.hillWidth, t = p.tenon, f = p.fit;
-    var pts = [[0, 0]], i;
+  function ribSection(p, h, y0, y1) {
+    var ys = baseYs(p), t = p.tenon, f = p.fit;
+    var pts = [[y0, 0]], i;
     for (i = 0; i < ys.length; i++) {
-      var a = ys[i][0] + f, b = ys[i][1] - f;
+      // clip each foot to this segment, so a split rib keeps the feet it owns
+      var a = Math.max(y0, ys[i][0] + f), b = Math.min(y1, ys[i][1] - f);
+      if (b - a < 1) continue;
       pts.push([a, 0], [a, -t], [b, -t], [b, 0]);
     }
-    pts.push([W, 0], [W, h], [0, h]);
+    pts.push([y1, 0], [y1, h], [y0, h]);
     return pts;
   }
-  function ribAt(p, x) {
-    // No minimum here: a clamped rib stands proud of the deck and holds the
-    // sheet off the rest of the frame. Ribs too short to be worth printing are
-    // dropped in build() instead.
+  function ribAt(p, x, y0, y1) {
+    // No minimum height here: a clamped rib stands proud of the deck and holds
+    // the sheet off the rest of the frame. Ribs too short to be worth printing
+    // are dropped in build() instead.
     var h = ribTop(p, x) - p.baseH;
-    return extrude(ribSection(p, h), x - p.ribThick / 2, x + p.ribThick / 2,
+    return extrude(ribSection(p, h, y0, y1), x - p.ribThick / 2, x + p.ribThick / 2,
       function (y, z, xx) { return [xx, y, z + p.baseH]; });
+  }
+
+  // A rib spans the whole width, so on a narrow bed it has to be split. Cut it
+  // over the centre of a base strip: the strip's mortise then holds both halves,
+  // and the joint lands on the stiffest line rather than in mid-air.
+  function ribCuts(p) {
+    var bed = Math.max(80, Math.min(p.bedX || 250, p.bedY || 250));
+    if (p.hillWidth <= bed) return [[0, p.hillWidth]];
+    var ys = baseYs(p), mids = ys.map(function (r) { return (r[0] + r[1]) / 2; });
+    var cuts = [0], i, guard = 0;
+    while (p.hillWidth - cuts[cuts.length - 1] > bed && guard++ < 50) {
+      var from = cuts[cuts.length - 1], pick = -1;
+      for (i = 0; i < mids.length; i++)
+        if (mids[i] > from + 20 && mids[i] - from <= bed) pick = mids[i];
+      if (pick < 0) pick = from + bed;          // no strip in reach; plain cut
+      cuts.push(pick);
+    }
+    cuts.push(p.hillWidth);
+    var out = [];
+    for (i = 0; i + 1 < cuts.length; i++) out.push([cuts[i], cuts[i + 1]]);
+    return out;
   }
 
   // A base strip: a flat bar on the ground with a mortise under every rib it
@@ -1849,17 +1894,23 @@ input[type=range]::-moz-range-thumb {
     var perHalf = Math.max(1, Math.ceil(half / p.maxSpan));
     var step = half / perHalf;
     var n = Math.round(p.hillLength / step) + 1;
-    var ribs = [], skipped = 0, i, k;
+    var ribs = [], skipped = 0, ribStation = 0, i, k;
     for (i = 0; i < n; i++) {
       var x = i * step, h = ribTop(p, x) - p.baseH;
       // Near a trough the deck is already down on the base ladder, so a rib
       // there has nothing to carry -- and anything shorter than this is not
       // worth printing.
       if (h < 6) { skipped++; continue; }
-      var tris = ribAt(p, x), out = tris.slice();
-      for (k = 0; k < out.length; k += 3) out[k] -= x - p.ribThick / 2;
-      ribs.push({ name: 'rib_' + (ribs.length < 10 ? '0' : '') + ribs.length,
-                  x: x, height: h, tris: out, placed: tris });
+      var segs = ribCuts(p), sfx = 'abcdefgh', si2;
+      var idx = ribStation++;
+      for (si2 = 0; si2 < segs.length; si2++) {
+        var tris = ribAt(p, x, segs[si2][0], segs[si2][1]), out = tris.slice();
+        for (k = 0; k < out.length; k += 3) out[k] -= x - p.ribThick / 2;
+        for (k = 1; k < out.length; k += 3) out[k] -= segs[si2][0];
+        ribs.push({ name: 'rib_' + (idx < 10 ? '0' : '') + idx +
+                          (segs.length > 1 ? sfx.charAt(si2) : ''),
+                    x: x, height: h, tris: out, placed: tris });
+      }
     }
     // Screws land on the rib's own top face, well inboard of its edges.
     var sy = [], m = p.screwsPerRib;
@@ -1867,7 +1918,8 @@ input[type=range]::-moz-range-thumb {
 
     // Base strips, cut into bed-length runs. A joint always falls midway
     // between two ribs, so the ribs either side pin it.
-    var stations = ribs.map(function (b) { return b.x; });
+    var stations = ribs.map(function (b) { return b.x; })
+      .filter(function (v, ix, arr) { return arr.indexOf(v) === ix; });
     var strips = [], ys = baseYs(p), si, sj;
     // Cut by length, not by rib count: ribs are skipped at the troughs, so
     // counting bays lets one segment straddle the gap and overrun the bed.
@@ -1920,7 +1972,9 @@ input[type=range]::-moz-range-thumb {
         var tris = stripAt(p, cuts[si], cuts[si + 1], stations, ys[sj][0], ys[sj][1]);
         var out = tris.slice();
         for (k = 0; k < out.length; k += 3) out[k] -= cuts[si];
-        strips.push({ name: 'base_' + si + (sj ? 'R' : 'L'),
+        // one letter per line: two lines collided on 'R' the moment there
+        // were three of them, and eight strips quietly overwrote each other
+        strips.push({ name: 'base_' + si + 'abcdefgh'.charAt(sj),
                       x0: cuts[si], x1: cuts[si + 1], side: sj,
                       tris: out, placed: tris });
       }
@@ -2261,7 +2315,8 @@ input[type=range]::-moz-range-thumb {
   function rebuildDeck() {
     var d = DK.build({ hillLength: state.hillLength, hillWidth: state.hillWidth,
                        hillHeight: state.hillHeight, humps: state.humps,
-                       crestFlat: state.crestFlat });
+                       crestFlat: state.crestFlat,
+                       bedX: state.bedX, bedY: state.bedY });
     var ps = DK.parts(d);
     var tiles = ps.map(function (q, i) {
       return { name: q.name, tris: q.tris, i: i, j: 0, ci: q.ci, flat: true,

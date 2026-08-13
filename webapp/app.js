@@ -288,7 +288,8 @@
   function rebuildDeck() {
     var d = DK.build({ hillLength: state.hillLength, hillWidth: state.hillWidth,
                        hillHeight: state.hillHeight, humps: state.humps,
-                       crestFlat: state.crestFlat });
+                       crestFlat: state.crestFlat,
+                       bedX: state.bedX, bedY: state.bedY });
     var ps = DK.parts(d);
     var tiles = ps.map(function (q, i) {
       return { name: q.name, tris: q.tris, i: i, j: 0, ci: q.ci, flat: true,

@@ -5,7 +5,7 @@ A 1100 × 250 mm ramp, two humps, 35 mm tall: a printed frame under a bent
 
 |  | printed | time |
 |---|---|---|
-| this | **0.74 kg** | **~15 h** |
+| this | **0.91 kg** | **~19 h** |
 | same ramp printed solid | 2.29 kg | 48 h |
 
 ## What changed from v1, and why it got heavier
@@ -16,13 +16,14 @@ printed edge — which splits, and strips the first time you take it apart.
 
 v2 adds the two things that were missing:
 
-- **A base ladder.** Two strips run the full length with a mortise under every
+- **A base ladder.** Three strips run the full length with a mortise under every
   rib; each rib has matching feet. The frame stands square and holds its own
-  spacing before the ply goes anywhere near it.
+  spacing before the ply goes anywhere near it. The middle strip also halves the
+  sheet's unsupported span across the width near the troughs, 110 mm down to 55.
 - **12 mm ribs**, up from 8, so a screw has real material either side of it.
 
-That is where the extra 0.44 kg went. It is the difference between a jig and a
-structure, and it is still 3× lighter and under a third of the time of solid.
+That is where the extra 0.6 kg went. It is the difference between a jig and a
+structure, and it is still 2.5× lighter and under half the time of solid.
 
 ## Why this geometry
 
@@ -39,13 +40,13 @@ trough while the other is on a crest, they cancel, and it feels flat.
 2 mm sag at a 200 N wheel load, and placed so a rib lands on each crest, where
 load and bend are worst.
 
-## Parts — 24 in total
+## Parts — 32 in total
 
 | file | size | qty |
 |---|---|---|
 | `rib_01`, `rib_04` | 250 × 12 × 30 mm | 1 each |
 | `rib_00`, `rib_02`, `rib_03`, `rib_05` | 250 × 12 × 21 mm | 1 each |
-| `base_0L` … `base_7R` | 101–220 × 30 × 6 mm | 16 |
+| `base_0L` … `base_7R` | 101–220 × 30 × 6 mm | 24 (3 lines) |
 | `threshold_x2` | 250 × 80 × 9 mm | **2** |
 
 Ribs are all different heights and are **not** interchangeable. Print them
@@ -101,3 +102,13 @@ the difference between a joint that lasts one rebuild and one that lasts many.
   committing to the whole build.
 - Generated from `webapp/deck.js`; the solid path has an OpenSCAD cross-check
   and this does not.
+
+## Wider than your bed
+
+A rib spans the whole width and prints standing on edge, so its footprint is as
+long as the ramp is wide. Past the bed it is cut over the centre of a base strip
+— the mortise there holds both halves and the joint lands on the stiffest line
+rather than in mid-air. Those parts are named `rib_00a`, `rib_00b` and so on;
+they are not interchangeable between stations either. Base strips are cut to the
+bed the same way, so both follow whichever printer is selected in the
+generator.
