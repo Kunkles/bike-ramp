@@ -30,7 +30,8 @@ bed_y       = 250;   // usable bed across the width. A MK4 would be 244 x 204
 tab_depth   = 12;
 tab_neck    = 18;    // width where the dovetail meets the tile (narrow)
 tab_tip     = 26;    // width at the tip (wide -> locks)
-fit         = 0.35;  // clearance cut into the matching socket, per side
+fit         = 0.20;  // clearance cut into the matching socket, per side. These are
+                     // drop-in joints, so this is for print error, not for sliding
 min_tab_h   = 10;    // skip dovetails where the hill is shorter than this
 
 /* [Ground spikes] */

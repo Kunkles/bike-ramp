@@ -118,7 +118,9 @@
     ]},
     { group:'Printer', custom:'printer', items:[
       { k:'fit', label:'Joint clearance', min:0.1, max:0.8, step:0.05, unit:'mm',
-        hint:'Cut into each socket, per side. Raise it if your prints run tight.' }
+        hint:'Cut into each socket, per side, so twice this is the play across ' +
+             'a dovetail. Assembly is straight down, so it is there for print ' +
+             'error rather than sliding \u2014 drop to 0.15 if it still rattles.' }
     ]},
     { group:'Estimate', items:[
       { k:'infill', label:'Infill', min:0.05, max:0.4, step:0.01, unit:'%', pct:true },

@@ -127,9 +127,15 @@ from it.
 Tiles drop straight down into place; the dovetails are plan-view only, so any
 tile can go in at any time and nothing needs sliding. Lay them out 3 along the
 run × 2 across, matching the `tile_IJ` numbering, and press the seams together.
-Sockets are cut with 0.35 mm clearance — snug, not a hammer fit. If a joint is
-tight, a pass with a knife on the socket walls is quicker than reprinting; if
-your printer runs tight in general, re-render with `-D fit=0.5`.
+Sockets are cut with **0.20 mm** clearance per side, so 0.4 mm of play across
+each dovetail. These are plan-view joints — assembly is straight down and the
+flanks never slide against each other — so the clearance is there to absorb
+print error, mostly first-layer squish on the tab, not to make the parts go
+together. 0.35 mm proved loose enough to rattle on a test print.
+
+If a joint binds, a pass with a knife on the socket walls is quicker than
+reprinting, and turning on elephant-foot compensation helps. If it still
+rattles, drop to 0.15 mm.
 
 Label each tile as it comes off the plate. They all look similar and only one
 arrangement is right.
@@ -267,7 +273,7 @@ the option open.
 | `bevel_run` | 90 | side taper. 0 = vertical sides (don't, for a toddler) |
 | `edge_lip` | 1.2 | thickness at the toe. Keeps it printable instead of a 0 mm feather |
 | `bed_x` / `bed_y` | 250 / 250 | usable bed. Tiling is computed from these |
-| `fit` | 0.35 | dovetail socket clearance per side |
+| `fit` | 0.20 | dovetail socket clearance per side |
 | `spike_len` | 0 | ground spike protrusion. 6 / 13 / 25 for ¼ / ½ / 1 inch |
 | `grip_depth` | 0 | try 0.6 for shallow traction grooves across the surface |
 
