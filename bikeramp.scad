@@ -18,6 +18,7 @@ hill_length = 600;   // total run, front toe to back toe (mm)
 hill_width  = 300;   // riding width (mm)
 hill_height = 45;    // crest height (mm)
 humps       = 1;     // 1 = single hill, 2 = camel back, ...
+crest_flat  = 0;     // roller only: flat run held at each crest (mm)
 bevel_run   = 90;    // side taper: outer this-many mm slope down to the floor. 0 = vertical sides
 edge_lip    = 1.2;   // thickness at the toe and outer edges. Raising it makes the edge
                      // sturdier but shrinks the fully-solid zone near the toe
@@ -104,7 +105,13 @@ function prof_x(x) =
       ? (h < 0.01 ? edge_lip
          : let (R = (L * L + h * h) / (2 * h), xx = min(max(x, 0), L))
            edge_lip + R - sqrt(max(0, R * R - xx * xx)))
-  : edge_lip + h / 2 * (1 - cos(360 * humps * x / L));
+  : // Roller: a raised cosine, optionally held at its peak for a flat top.
+    let (lam = L / max(1, humps),
+         c = min(max(0, crest_flat), lam * 0.8),
+         w = lam - c,
+         u = x - floor(x / lam) * lam,
+         ue = u < w / 2 ? u : (u > w / 2 + c ? u - c : w / 2))
+    edge_lip + h / 2 * (1 - cos(360 * ue / w));
 
 // Steepest gradient the rider meets: the lip on a kicker, the approach on a drop.
 function max_slope() =
@@ -113,7 +120,9 @@ function max_slope() =
   : shape == "kicker" ? (h < 0.01 ? 0
                          : let (R = (L * L + h * h) / (2 * h))
                            atan(L / max(1e-9, R - h)))
-  : atan(PI * humps * h / L);
+  : // the cosine is squeezed into (wavelength - flat), so it steepens
+    let (lam = L / max(1, humps), c = min(max(0, crest_flat), lam * 0.8))
+    atan(PI * h / max(1e-9, lam - c));
 
 // Crosswise: flat in the middle, tapering to the floor over bevel_run.
 function prof_y(y) =

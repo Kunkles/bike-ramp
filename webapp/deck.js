@@ -27,6 +27,7 @@
     hillWidth: 250,       // mm, across -- also the sheet width
     hillHeight: 35,       // mm, at the crest, to the top of the SHEET
     humps: 2,
+    crestFlat: 0,         // mm of flat held at each crest
     sheet: 3.175,         // mm, 1/8 inch plywood
     maxSpan: 108,         // mm, the sag limit for that sheet under a wheel
     ribThick: 12,         // mm, so a screw has real material either side of it
@@ -42,7 +43,7 @@
   function prof(p, x) {
     return BR.profX({ shape: 'roller', humps: p.humps, hillLength: p.hillLength,
                       hillHeight: p.hillHeight, edgeLip: 1.2, bevelRun: 0,
-                      deck: 0 }, x);
+                      deck: 0, crestFlat: p.crestFlat || 0 }, x);
   }
   // The ramp surface is the top of the SHEET, so a rib stops short of it by one
   // sheet thickness measured perpendicular -- a slightly larger drop vertically.
@@ -316,12 +317,19 @@
   // Everything the viewport draws, already positioned on the ground.
   function parts(r) {
     var p = r.params, out = [];
-    r.ribs.forEach(function (b) { out.push({ name: b.name, tris: b.placed, ci: 0 }); });
-    r.strips.forEach(function (b) { out.push({ name: b.name, tris: b.placed, ci: 2 }); });
+    r.ribs.forEach(function (b) { out.push({ name: b.name, tris: b.placed, ci: 0, kind: 'rib' }); });
+    r.strips.forEach(function (b) { out.push({ name: b.name, tris: b.placed, ci: 2, kind: 'base' }); });
+    // The thresholds lead UP to the deck from the ground, so they belong
+    // outside the run. Left inside it they sit buried under the sheet and the
+    // ramp just ends at a 9 mm cliff.
     var th = r.threshold.tris, a = th.slice(), b2 = th.slice(), i;
-    for (i = 0; i < b2.length; i += 3) b2[i] = p.hillLength - b2[i];
-    out.push({ name: 'threshold (near)', tris: a, ci: 0 });
-    out.push({ name: 'threshold (far)', tris: b2, ci: 0 });
+    for (i = 0; i < a.length; i += 3) a[i] -= p.endRun;
+    for (i = 0; i < b2.length; i += 3) b2[i] = p.hillLength + p.endRun - b2[i];
+    // match the sheet's display lift so the joint reads flush in the preview
+    for (i = 2; i < a.length; i += 3) a[i] += 0.25;
+    for (i = 2; i < b2.length; i += 3) b2[i] += 0.25;
+    out.push({ name: 'threshold (near)', tris: a, ci: 0, kind: 'end', dir: -1 });
+    out.push({ name: 'threshold (far)', tris: b2, ci: 0, kind: 'end', dir: 1 });
     out.push({ name: 'plywood deck', tris: r.sheetTris, ci: 1, sheet: true });
     return out;
   }

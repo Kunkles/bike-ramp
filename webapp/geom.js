@@ -337,7 +337,15 @@
       return lip + R - Math.sqrt(Math.max(0, R * R - xx * xx));
     }
 
-    return lip + h / 2 * (1 - Math.cos(2 * Math.PI * p.humps * x / L));
+    // Roller: a raised cosine, optionally held at its peak to give a flat top.
+    // Holding rather than stretching keeps the toe shape and the approach curve
+    // intact -- the cosine is simply compressed into what length is left, so a
+    // longer flat makes the sides steeper rather than changing their character.
+    var lam = L / Math.max(1, p.humps);
+    var c = Math.min(Math.max(0, p.crestFlat || 0), lam * 0.8);
+    var w = lam - c, u = x - Math.floor(x / lam) * lam;
+    var ue = u < w / 2 ? u : (u > w / 2 + c ? u - c : w / 2);
+    return lip + h / 2 * (1 - Math.cos(2 * Math.PI * ue / w));
   }
   function profY(p, y) {
     if (p.bevelRun <= 0) return p.hillHeight;
@@ -360,7 +368,10 @@
       var R = (L * L + h * h) / (2 * h);
       t = L / Math.max(1e-9, R - h);
     } else {
-      t = Math.PI * p.humps * h / L;
+      // the cosine is squeezed into (wavelength - flat), so it steepens
+      var lam2 = L / Math.max(1, p.humps);
+      var c2 = Math.min(Math.max(0, p.crestFlat || 0), lam2 * 0.8);
+      t = Math.PI * h / Math.max(1e-9, lam2 - c2);
     }
     return Math.atan(t) * 180 / Math.PI;
   }

@@ -112,6 +112,11 @@
       { k:'humps',      label:'Humps',      min:1,   max:4,    step:1,  unit:'',
         hint:'More than one? Add length to match, or it gets steep.',
         show:function () { return state.shape === 'roller'; } },
+      { k:'crestFlat',  label:'Flat top',   min:0,   max:400,  step:10, unit:'mm',
+        hint:'A level run held at each crest. The curve is squeezed into what ' +
+             'is left, so a long flat makes the approach steeper \u2014 watch ' +
+             'the max slope.',
+        show:function () { return state.shape === 'roller'; } },
       { k:'bevelRun',   label:'Side taper', min:0,   max:250,  step:5,  unit:'mm',
         hint:'How far the sides slope down to the floor. 0 gives a cliff edge.' },
       { k:'edgeLip',    label:'Toe thickness', min:1.2, max:5, step:0.2, unit:'mm',
@@ -282,11 +287,12 @@
   // drawn so the ramp reads as the finished thing rather than a bare frame.
   function rebuildDeck() {
     var d = DK.build({ hillLength: state.hillLength, hillWidth: state.hillWidth,
-                       hillHeight: state.hillHeight, humps: state.humps });
+                       hillHeight: state.hillHeight, humps: state.humps,
+                       crestFlat: state.crestFlat });
     var ps = DK.parts(d);
     var tiles = ps.map(function (q, i) {
       return { name: q.name, tris: q.tris, i: i, j: 0, ci: q.ci, flat: true,
-               sheet: !!q.sheet, m: BR.measure(q.tris) };
+               kind: q.kind, dir: q.dir, sheet: !!q.sheet, m: BR.measure(q.tris) };
     });
     var e = DK.estimate(d, { infill: state.infill, flow: state.flow });
     result = {
@@ -317,6 +323,13 @@
 
   function tileOffset(t) {
     if (state.mode !== 'exploded' || t.ghost) return [0, 0, 0];
+    // The deck frame explodes along the way it goes together: ribs lift off
+    // the base ladder so the mortises show, ends slide clear of the run.
+    if (t.kind) {
+      if (t.kind === 'rib') return [0, 0, 70];
+      if (t.kind === 'end') return [(t.dir || 1) * 90, 0, 0];
+      return [0, 0, 0];
+    }
     var g = 55, tl = result.tiling;
     return [(t.i - (tl.nx - 1) / 2) * g, (t.j - (tl.ny - 1) / 2) * g, 0];
   }
@@ -324,6 +337,10 @@
   function visibleTiles() {
     var base = state.isolate == null ? result.tiles
       : result.tiles.filter(function (t) { return t.name === state.isolate; });
+    // Exploded is for seeing the printed frame. The plywood is not printed and
+    // only hides it, so drop it there.
+    if (state.mode === 'exploded')
+      base = base.filter(function (t) { return !t.sheet; });
     return (state.bike && state.mode !== 'exploded')
       ? base.concat(bikeMesh()) : base;
   }
@@ -1261,6 +1278,7 @@
       decal_text: '"' + String(state.decalText).replace(/"/g, '') + '"',
       hill_length: state.hillLength, hill_width: state.hillWidth,
       hill_height: state.hillHeight, humps: state.humps, bevel_run: state.bevelRun,
+      crest_flat: state.crestFlat,
       edge_lip: state.edgeLip, bed_x: state.bedX, bed_y: state.bedY,
       fit: state.fit, spike_len: state.spikeLen
     };

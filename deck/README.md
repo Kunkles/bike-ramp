@@ -70,7 +70,9 @@ One piece, **1100 × 250 mm**, 1/8" (3.2 mm), grain along the length.
 3. Bend the ply over the frame and screw down **from the crests outward**.
 4. Three screws per rib at **20 / 125 / 230 mm** across. Drill a 2.5 mm pilot
    through ply *and* into the rib. **#8 × 3/4"** pan head.
-5. Fit a threshold at each end and screw through it.
+5. Fit a threshold at each end. They sit **outside** the ramp, on the ground,
+   with their tall edge butted against the deck — they are the run-up onto it,
+   not part of it. Screw down through each into the ground or a stake.
 
 ### If you want it to survive being taken apart
 
@@ -82,8 +84,10 @@ the difference between a joint that lasts one rebuild and one that lasts many.
 
 1. **Stand on a crest.** More than ~3 mm sag means thin ply or a rib not seated.
 2. **Every rib bearing** — no rattle when you press between ribs.
-3. **No step at either threshold.** They climb the 6 mm base plus the 3.2 mm
-   sheet over an 80 mm run; that is the one place a wheel can catch.
+3. **No step at either threshold.** The deck sits 9.2 mm up — 6 mm of base
+   ladder plus the 3.2 mm sheet — and each threshold climbs that over an 80 mm
+   run (6.6 deg). Butt them tight to the deck edge: this is the one place on the
+   whole ramp a wheel can catch.
 4. Screw heads flush; ease the exposed ply edges with sandpaper.
 
 ## Known limits
