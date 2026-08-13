@@ -205,7 +205,9 @@ Tick **Separate bodies for AMS** and the download gains one thin body per decal
 level — `tile_00_letters.stl`, `_checker_a`, `_checker_b` — already aligned to
 the tile. Load them as parts of the tile in the slicer and assign filaments.
 Use two, three or four colours; assigning two bodies the same filament costs
-nothing.
+nothing. The preview colours each region separately, so what you see on screen
+is what you would assign in the slicer — pick a region under **Filament
+colours**, then a swatch.
 
 The bodies overlap the tile rather than being cut from it, which is how slicers
 expect it: overlapping parts of one object resolve in favour of the later part.

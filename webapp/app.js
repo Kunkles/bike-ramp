@@ -58,8 +58,26 @@
     bedX: PRINTERS[0].x - BED_MARGIN,
     bedY: PRINTERS[0].y - BED_MARGIN,
     flow: PRINTERS[0].flow,
-    spikeLen: 6, infill: 0.20, ams: false, colour: '#FF2E88', mode: 'assembled', isolate: null
+    spikeLen: 6, infill: 0.25, ams: false, mode: 'assembled', isolate: null,
+    colours: ['#FF2E88', '#25E3D8', '#FFE14D', '#1A1728'],
+    paint: 0
   });
+
+  // Which colour a point on the surface takes, matching the bodies the download
+  // splits out: body, letters, proud squares, sunk squares.
+  var REGIONS = [
+    { i:0, label:'Body' },
+    { i:1, label:'Letters', needs:['text', 'both'] },
+    { i:2, label:'Checker A', needs:['checker', 'both'] },
+    { i:3, label:'Checker B', needs:['checker', 'both'] }
+  ];
+  function regionAt(p, x, y) {
+    if (!p._decal || !p._decal.length) return 0;
+    var r = BR.reliefAt(p, x, y);
+    if (Math.abs(r) < 1e-9) return 0;
+    if (r > p.decalRelief * 0.75) return 1;
+    return r > 0 ? 2 : 3;
+  }
 
   var DECAL_OPTS = [
     { label:'None',    v:'none' },
@@ -126,6 +144,7 @@
     });
     applyVisibility();
     syncShape();
+    if (paintSync) paintSync();
     renderReadouts();
     renderTiles();
     gl.upload(buildBuffers());
@@ -161,7 +180,7 @@
     var tiles = visibleTiles(), p = result.params;
     var n = 0, i;
     for (i = 0; i < tiles.length; i++) n += tiles[i].tris.length / 3;
-    var data = new Float32Array(n * 7), w = 0, nrm = [0, 0, 0];
+    var data = new Float32Array(n * 8), w = 0, nrm = [0, 0, 0];
 
     tiles.forEach(function (t) {
       var off = tileOffset(t);
@@ -175,19 +194,22 @@
         var m = Math.hypot(fx,fy,fz) || 1;
         var smooth = fz / m > 0.15;
         var mx = (ax + bx + cx) / 3, my = (ay + by + cy) / 3;
+        // by plan position, so a raised letter carries its own colour down its
+        // sides as well as across its face
+        var ci = regionAt(p, mx, my);
         for (var v = 0; v < 3; v++) {
           var x=tr[k+v*3], y=tr[k+v*3+1], z=tr[k+v*3+2];
           if (smooth) topNormal(p, x, y, mx, my, nrm);
           else { nrm[0]=fx/m; nrm[1]=fy/m; nrm[2]=fz/m; }
           data[w++]=x+off[0]; data[w++]=y+off[1]; data[w++]=z+off[2];
           data[w++]=nrm[0]; data[w++]=nrm[1]; data[w++]=nrm[2];
-          data[w++]=shade;
+          data[w++]=shade; data[w++]=ci;
         }
       }
     });
 
     var bb = [Infinity,Infinity,Infinity,-Infinity,-Infinity,-Infinity];
-    for (i = 0; i < w; i += 7)
+    for (i = 0; i < w; i += 8)
       for (var d = 0; d < 3; d++) {
         if (data[i+d] < bb[d]) bb[d] = data[i+d];
         if (data[i+d] > bb[3+d]) bb[3+d] = data[i+d];
@@ -212,13 +234,14 @@
     var cam = { yaw: -0.86, pitch: 0.42, zoom: 1 };
 
     var VS = '#version 300 es\n' +
-      'in vec3 aPos; in vec3 aNrm; in float aShade;\n' +
+      'in vec3 aPos; in vec3 aNrm; in float aShade; in float aCi;\n' +
       'uniform mat4 uMVP;\n' +
-      'out vec3 vN; out float vS;\n' +
-      'void main(){ vN=aNrm; vS=aShade; gl_Position=uMVP*vec4(aPos,1.0); }';
+      'out vec3 vN; out float vS; flat out int vCi;\n' +
+      'void main(){ vN=aNrm; vS=aShade; vCi=int(aCi+0.5);\n' +
+      '  gl_Position=uMVP*vec4(aPos,1.0); }';
     var FS = '#version 300 es\nprecision highp float;\n' +
-      'in vec3 vN; in float vS;\n' +
-      'uniform vec3 uColor;\n' +
+      'in vec3 vN; in float vS; flat in int vCi;\n' +
+      'uniform vec3 uColor[4];\n' +
       'out vec4 o;\n' +
       'void main(){\n' +
       '  vec3 n=normalize(vN);\n' +
@@ -226,7 +249,8 @@
       '  float rim=max(dot(n,normalize(vec3(0.75,0.5,0.15))),0.0);\n' +
       '  float sky=0.5+0.5*n.z;\n' +
       '  float fill=max(-n.z,0.0);\n' +
-      '  vec3 c=uColor*(0.26+0.62*key+0.20*sky+0.20*fill)+vec3(0.10)*rim*0.5;\n' +
+      '  vec3 base=uColor[vCi];\n' +
+      '  vec3 c=base*(0.26+0.62*key+0.20*sky+0.20*fill)+vec3(0.10)*rim*0.5;\n' +
       '  o=vec4(clamp(c*vS,0.0,1.0),1.0);\n' +
       '}';
     var GVS = '#version 300 es\nin vec3 aPos; uniform mat4 uMVP;\n' +
@@ -343,17 +367,23 @@
 
         g.useProgram(prog);
         g.uniformMatrix4fv(g.getUniformLocation(prog, 'uMVP'), false, m);
-        var n = parseInt(state.colour.slice(1), 16);
-        g.uniform3f(g.getUniformLocation(prog, 'uColor'),
-                    (n>>16&255)/255, (n>>8&255)/255, (n&255)/255);
+        var cols = new Float32Array(12);
+        for (var q = 0; q < 4; q++) {
+          var n = parseInt(state.colours[q].slice(1), 16);
+          cols[q*3] = (n>>16&255)/255; cols[q*3+1] = (n>>8&255)/255;
+          cols[q*3+2] = (n&255)/255;
+        }
+        g.uniform3fv(g.getUniformLocation(prog, 'uColor'), cols);
         g.bindBuffer(g.ARRAY_BUFFER, vbo);
         var ap = g.getAttribLocation(prog, 'aPos'),
             an = g.getAttribLocation(prog, 'aNrm'),
-            as = g.getAttribLocation(prog, 'aShade');
-        [ap, an, as].forEach(function (a) { g.enableVertexAttribArray(a); });
-        g.vertexAttribPointer(ap, 3, g.FLOAT, false, 28, 0);
-        g.vertexAttribPointer(an, 3, g.FLOAT, false, 28, 12);
-        g.vertexAttribPointer(as, 1, g.FLOAT, false, 28, 24);
+            as = g.getAttribLocation(prog, 'aShade'),
+            ac = g.getAttribLocation(prog, 'aCi');
+        [ap, an, as, ac].forEach(function (a) { g.enableVertexAttribArray(a); });
+        g.vertexAttribPointer(ap, 3, g.FLOAT, false, 32, 0);
+        g.vertexAttribPointer(an, 3, g.FLOAT, false, 32, 12);
+        g.vertexAttribPointer(as, 1, g.FLOAT, false, 32, 24);
+        g.vertexAttribPointer(ac, 1, g.FLOAT, false, 32, 28);
         g.drawArrays(g.TRIANGLES, 0, count);
       },
       setPitch: function (v) { cam.pitch = v; },
@@ -447,7 +477,7 @@
   }
 
   // -------------------------------------------------------------- controls --
-  var bedInputs = null;
+  var bedInputs = null, paintSync = null;
 
   function printerPicker() {
     var wrap = document.createDocumentFragment();
@@ -724,23 +754,56 @@
     dg.appendChild(ag);
 
     var fg = el('div', 'group');
-    fg.appendChild(el('h2', null, 'Filament colour'));
+    fg.appendChild(el('h2', null, 'Filament colours'));
+    var pchips = el('div', 'chips');
     var sw = el('div', 'swatches');
+
+    function ink(hex) {                     // legible label on any swatch
+      var n = parseInt(hex.slice(1), 16);
+      var l = 0.299 * (n >> 16 & 255) + 0.587 * (n >> 8 & 255) + 0.114 * (n & 255);
+      return l > 150 ? '#15121F' : '#FFFFFF';
+    }
+    function syncPaint() {
+      pchips.textContent = '';
+      REGIONS.forEach(function (rg) {
+        if (rg.needs && rg.needs.indexOf(state.decal) < 0) return;
+        var c = el('button', 'chip paint', rg.label);
+        c.type = 'button';
+        c.style.background = state.colours[rg.i];
+        c.style.color = ink(state.colours[rg.i]);
+        c.style.borderColor = 'var(--ink)';
+        c.setAttribute('aria-pressed', String(state.paint === rg.i));
+        c.addEventListener('click', function () {
+          state.paint = rg.i;
+          syncPaint();
+        });
+        pchips.appendChild(c);
+      });
+      Array.prototype.forEach.call(sw.children, function (o) {
+        o.setAttribute('aria-pressed', String(o.dataset.hex === state.colours[state.paint]));
+      });
+    }
+    paintSync = syncPaint;
+
     FILAMENTS.forEach(function (hex) {
       var b = el('button', 'swatch');
-      b.type = 'button'; b.style.background = hex;
-      b.setAttribute('aria-label', 'Preview in ' + hex);
-      b.setAttribute('aria-pressed', String(state.colour === hex));
+      b.type = 'button';
+      b.style.background = hex;
+      b.dataset.hex = hex;
+      b.setAttribute('aria-label', 'Paint in ' + hex);
       b.addEventListener('click', function () {
-        state.colour = hex;
-        Array.prototype.forEach.call(sw.children, function (o) {
-          o.setAttribute('aria-pressed', String(o === b));
-        });
+        state.colours[state.paint] = hex;
+        syncPaint();
         draw();
       });
       sw.appendChild(b);
     });
+    fg.appendChild(pchips);
     fg.appendChild(sw);
+    fg.appendChild(el('p', 'hint',
+      'Preview only \u2014 pick a region, then a colour. It matches the bodies ' +
+      'the download splits out, so what you see is what you would assign in the ' +
+      'slicer.'));
     host.appendChild(fg);
 
     var ag = el('div', 'actions');

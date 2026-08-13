@@ -180,7 +180,9 @@ input[type=range]::-moz-range-thumb {
   box-shadow:2px 2px 0 var(--ice); transform:translate(-1px,-1px);
 }
 
-.swatches { display:flex; gap:8px; flex-wrap:wrap; }
+.chip.paint { font-size:11px; padding:5px 10px; }
+.chip.paint[aria-pressed="true"] { box-shadow:2px 2px 0 var(--ink); transform:translate(-1px,-1px); }
+.swatches { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
 .swatch {
   width:27px; height:27px; border-radius:4px; cursor:pointer; padding:0;
   border:2px solid var(--ink); transform:skewX(-10deg);
