@@ -19,7 +19,8 @@ hill_width  = 300;   // riding width (mm)
 hill_height = 45;    // crest height (mm)
 humps       = 1;     // 1 = single hill, 2 = camel back, ...
 bevel_run   = 90;    // side taper: outer this-many mm slope down to the floor. 0 = vertical sides
-edge_lip    = 1.2;   // thickness at the very edges. Keeps the toe printable instead of a 0mm feather
+edge_lip    = 1.2;   // thickness at the toe and outer edges. Raising it makes the edge
+                     // sturdier but shrinks the fully-solid zone near the toe
 
 /* [Printer] */
 bed_x       = 250;   // usable bed along the run.   X1C is 256; 250 leaves margin
@@ -63,7 +64,9 @@ grip_pitch  = 14;
 grip_width  = 4;
 
 /* [Output] */
-part   = "tile";     // "tile" | "hill" | "mono" | "spike"
+part      = "tile";  // "tile" | "hill" | "mono" | "spike" | "body"
+body_rel  = 0;       // "body": which relief level to skin, for multi-material
+body_skin = 0.9;     // how deep that skin runs
 tile_i = 0;          // tile index along the run
 tile_j = 0;          // tile index across the width
 
@@ -464,6 +467,26 @@ module socket_bore() {
     }
 }
 
+// A thin skin under the visible surface of one relief level, for AMS printing.
+// It overlaps the tile rather than being cut from it -- a slicer resolves
+// overlapping parts of one object in favour of the later part. Proud blocks are
+// grown and win where they meet sunk ones, so a sunk skin has them removed.
+module colour_body(rel, skin) {
+    intersection() {
+        difference() {
+            decal_prisms_at(rel);
+            if (rel < 0) {
+                decal_prisms_at(decal_relief / 2);
+                decal_prisms_at(decal_relief);
+            }
+        }
+        difference() {
+            intersection() { sweep_x(); translate([0, 0, rel]) sweep_y(); }
+            intersection() { sweep_x(); translate([0, 0, rel - skin]) sweep_y(); }
+        }
+    }
+}
+
 module spike_sockets(i, j) {
     if (spike_len > 0)
         for (q = spike_spot(i, j))
@@ -527,6 +550,8 @@ if (part == "hill")
         translate([i * px, j * py, 0]) tile(i, j);
 else if (part == "spike")
     spike_part();
+else if (part == "body")
+    colour_body(body_rel, body_skin);
 else if (part == "mono")          // uncut hill, for checking the joints
     difference() { hill_solid(); grip_cut(); }
 else

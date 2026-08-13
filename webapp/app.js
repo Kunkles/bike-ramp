@@ -58,7 +58,7 @@
     bedX: PRINTERS[0].x - BED_MARGIN,
     bedY: PRINTERS[0].y - BED_MARGIN,
     flow: PRINTERS[0].flow,
-    spikeLen: 6, infill: 0.15, colour: '#FF2E88', mode: 'assembled', isolate: null
+    spikeLen: 6, infill: 0.20, ams: false, colour: '#FF2E88', mode: 'assembled', isolate: null
   });
 
   var DECAL_OPTS = [
@@ -92,7 +92,11 @@
         hint:'More than one? Add length to match, or it gets steep.',
         show:function () { return state.shape === 'roller'; } },
       { k:'bevelRun',   label:'Side taper', min:0,   max:250,  step:5,  unit:'mm',
-        hint:'How far the sides slope down to the floor. 0 gives a cliff edge.' }
+        hint:'How far the sides slope down to the floor. 0 gives a cliff edge.' },
+      { k:'edgeLip',    label:'Toe thickness', min:1.2, max:5, step:0.2, unit:'mm',
+        hint:'How thick the ramp is at its very edge. Sturdier when raised, but ' +
+             'it also shrinks the fully-solid zone near the toe \u2014 so raise ' +
+             'top layers with it.' }
     ]},
     { group:'Printer', custom:'printer', items:[
       { k:'fit', label:'Joint clearance', min:0.1, max:0.8, step:0.05, unit:'mm',
@@ -700,6 +704,25 @@
       'Decals stop short of the joints so a tab still seats.'));
     host.appendChild(dg);
 
+    var ag = el('div', 'ctrl');
+    var achip = el('button', 'chip', 'Separate bodies for AMS');
+    achip.type = 'button';
+    achip.setAttribute('aria-pressed', String(state.ams));
+    achip.addEventListener('click', function () {
+      state.ams = !state.ams;
+      achip.setAttribute('aria-pressed', String(state.ams));
+      renderReadouts();
+    });
+    var awrap = el('div', 'chips');
+    awrap.appendChild(achip);
+    ag.appendChild(awrap);
+    ag.appendChild(el('p', 'hint',
+      'Adds a thin body per decal level to the download \u2014 letters, proud ' +
+      'squares, sunk squares \u2014 already aligned. Load them as parts in the ' +
+      'slicer and assign filaments. Decals span many layers on a slope, so ' +
+      'turn on flush into object infill or the purge will cost more than the ramp.'));
+    dg.appendChild(ag);
+
     var fg = el('div', 'group');
     fg.appendChild(el('h2', null, 'Filament colour'));
     var sw = el('div', 'swatches');
@@ -813,7 +836,16 @@
         ' mm3/s average, plus 6 min a plate',
       '            (rough -- slice one plate to confirm)', '',
       'Slicing',
-      '  0.28 mm layers, 3 walls, 6 top / 4 bottom layers, gyroid infill.',
+      '  0.28 mm layers, 3 walls, 10 top / 4 bottom layers, 25% gyroid.',
+      '',
+      '  Those last two are higher than the usual defaults for a reason. The low',
+      '  end of the ramp is a nearly flat surface over sparse infill, which is',
+      '  the classic case for pinholes in the top skin -- the skin sags between',
+      '  infill lines before it closes. 25% infill puts a support every ~1.7 mm',
+      '  instead of ~2.8 mm, and 10 top layers give it 2.8 mm to close in.',
+      '  Also turn on Ensure vertical shell thickness. If it still shows, drop to',
+      '  0.2 mm layers: the surface is shallow, so thinner layers put far more',
+      '  material under the skin per millimetre of run.',
       '  No supports needed. Add a ~5 mm brim; the footprints are broad and flat.',
       '  PLA indoors only. It softens around 55-60 C, so a hot garage or a sunny',
       '  car will deform it. Use PETG or ASA if it lives outside.', '',
@@ -861,6 +893,17 @@
     if (state.spikeLen && result.spikes)
       files.push({ name: 'spike_x' + result.spikes + '.stl',
                    data: BR.stlBinary(BR.spikeMesh(state), [0, 0, 0]) });
+    if (state.ams && state.decal !== 'none') {
+      var lv = BR.decalLevels(result.params);
+      result.tiles.forEach(function (t) {
+        lv.forEach(function (L) {
+          var body = BR.decalBody(result.params, result.tiling, t.i, t.j, L.rel, 0.9);
+          if (body.length)
+            files.push({ name: t.name + '_' + L.name + '.stl',
+                         data: BR.stlBinary(body, t.m.min) });
+        });
+      });
+    }
     files.push({ name: 'README.txt', data: enc.encode(readme()) });
     files.push({ name: 'bikeramp.scad', data: enc.encode(scadSource()) });
     save(BR.zip(files), slug() + '.zip');

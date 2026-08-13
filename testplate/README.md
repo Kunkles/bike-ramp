@@ -18,7 +18,9 @@ About 163 g and 5 h total (nearer 3.5 h on an X1C).
 
 ## Slice it exactly like the real thing
 
-0.28 mm layers, 3 walls, 6 top / 4 bottom, 15% gyroid, no supports, 5 mm brim.
+0.28 mm layers, 3 walls, **10 top** / 4 bottom, **25% gyroid**, no supports,
+5 mm brim. The high top-shell and infill matter: the low end of the ramp is
+nearly flat over sparse infill and will pinhole in the skin at the usual 6/15%.
 Spikes the same but 4 walls and 40% infill, printed stud-down as oriented.
 
 ## What to check

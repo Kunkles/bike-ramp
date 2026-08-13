@@ -81,10 +81,23 @@ most expensive; its real time and weight tell you what the whole set costs.
 | Material | **PLA indoors. PETG or ASA if it ever lives in a garage, car, or sun** |
 | Layer height | 0.28 mm (0.4 nozzle) |
 | Wall loops | 3 |
-| Top / bottom shells | 6 top, 4 bottom |
-| Infill | 15% gyroid |
+| Top / bottom shells | **10 top**, 4 bottom |
+| Infill | **25% gyroid** |
 | Supports | none — every tile prints flat side down, no overhangs |
 | Brim | yes, ~5 mm |
+
+**Why 10 top layers and 25% infill.** The low end of the ramp is a nearly flat
+surface sitting over sparse infill, which is the classic case for pinholes in
+the top skin — it sags between infill lines before it closes. This is a slicing
+symptom, not a hole in the model: the mesh there is solid and closed. 25% infill
+puts a support roughly every 1.7 mm instead of 2.8 mm, and 10 top layers give
+the skin 2.8 mm to close in. Turn on *Ensure vertical shell thickness* as well.
+If it still shows, drop to 0.2 mm layers — the surface is shallow, so thinner
+layers put far more material under the skin per millimetre of run.
+
+Raising **Toe thickness** does *not* fix this, and slightly works against it: a
+thicker toe shrinks the zone that is thin enough to print 100% solid, exposing
+more of the shallow curve to sparse infill. It is there for edge durability.
 
 The PLA warning is the one that matters. PLA starts going soft around 55–60 °C
 and a hill sitting in a sunny garage or the back of a car will sag out of shape.
@@ -185,6 +198,28 @@ broken however it is meshed.
 The letters are a 5×7 stencil so every edge is axis-aligned and lands on a mesh
 grid line exactly, which is what keeps them crisp and lets OpenSCAD and the mesh
 generator agree block for block.
+
+## Multi-colour (AMS)
+
+Tick **Separate bodies for AMS** and the download gains one thin body per decal
+level — `tile_00_letters.stl`, `_checker_a`, `_checker_b` — already aligned to
+the tile. Load them as parts of the tile in the slicer and assign filaments.
+Use two, three or four colours; assigning two bodies the same filament costs
+nothing.
+
+The bodies overlap the tile rather than being cut from it, which is how slicers
+expect it: overlapping parts of one object resolve in favour of the later part.
+The tile itself is unchanged and still prints fine on its own.
+
+**Watch the purge.** Decals sit on a slope, so they span ~132 layers per tile and
+every one of those needs colour changes. Across the six tiles that is roughly
+236 g with similar colours, ~550 g at strong contrast and over 1 kg going to
+black — against a 1266 g hill. Turn on *flush into object infill*; this hill has
+about 490 cm³ of infill to absorb it. Checker-only is a third the cost of the
+letters, since it sits low on the flank and spans 49 layers.
+
+From OpenSCAD: `-D 'part="body"' -D body_rel=1.2` for the letters, `0.6` for the
+proud squares, and the negative value for the sunk ones.
 
 ## Ground spikes
 

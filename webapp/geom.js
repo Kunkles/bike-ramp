@@ -802,13 +802,19 @@
     pieces.forEach(function (pc) {
       var poly = pc.poly, f = pc.floor, rel = pc.rel || 0, n = poly.length, i;
       var h = poly.map(function (q) { return topOf(p, rel, q[0], q[1]); });
+      // A colour skin's underside follows the flank rather than lying flat, so
+      // the floor can be given as a relief level instead of a plane.
+      var fr = pc.floorRel;
+      var bot = poly.map(function (q) {
+        return fr === undefined ? f : topOf(p, fr, q[0], q[1]);
+      });
       for (i = 1; i < n - 1; i++) {
         tri(poly[0][0], poly[0][1], h[0],
             poly[i][0], poly[i][1], h[i],
             poly[i + 1][0], poly[i + 1][1], h[i + 1]);                 // surface
-        tri(poly[0][0], poly[0][1], f,
-            poly[i + 1][0], poly[i + 1][1], f,
-            poly[i][0], poly[i][1], f);                                // underside
+        tri(poly[0][0], poly[0][1], bot[0],
+            poly[i + 1][0], poly[i + 1][1], bot[i + 1],
+            poly[i][0], poly[i][1], bot[i]);                           // underside
       }
       for (i = 0; i < n; i++) {
         var a = poly[i], b = poly[(i + 1) % n];
@@ -842,15 +848,98 @@
                    topOf(p, seq[z + 1], hh.a[0], hh.a[1]),
                    topOf(p, seq[z + 1], hh.b[0], hh.b[1]));
           }
-        } else edges.set(ka + '|' + kb, { a: a, b: b, f: f, rel: rel });
+        } else edges.set(ka + '|' + kb, { a: a, b: b, f: f, rel: rel,
+                                          fr: fr, ba: bot[i], bb: bot[(i + 1) % n] });
       }
     });
 
     edges.forEach(function (e) {
       var a = e.a, b = e.b, r = e.rel || 0;
-      wall(a, b, e.f, e.f, topOf(p, r, a[0], a[1]), topOf(p, r, b[0], b[1]));
+      var z0 = e.fr === undefined ? e.f : e.ba, z1 = e.fr === undefined ? e.f : e.bb;
+      wall(a, b, z0, z1, topOf(p, r, a[0], a[1]), topOf(p, r, b[0], b[1]));
     });
     return tris;
+  }
+
+  // ------------------------------------------------------- colour bodies ----
+  // For AMS printing: a thin skin sitting just under the visible surface of one
+  // relief level, following the flank. It overlaps the tile rather than being
+  // cut from it -- a slicer resolves overlapping parts of one object in favour
+  // of the later part, so the tile itself is unchanged and still prints alone.
+  //
+  // Top and bottom are the same height field at two levels, so where the riding
+  // surface clamps the relief the skin closes to nothing on its own.
+  function decalBody(p, t, i, j, rel, skin) {
+    var all = p._decal || [];
+    if (!all.some(function (r) { return Math.abs(r[4] - rel) < 1e-9; })) return [];
+    // Grid lines come from *every* block, not just this level's. The proud
+    // blocks are grown, and it is that sliver of overgrowth which holds diagonal
+    // sunk squares apart -- without a line on it the two sunk cells meet at a
+    // point and the body will not close.
+    var foot = [];
+    all.forEach(function (r) {
+      foot.push([r[0], r[1], r[2], r[3]]);
+      foot.push([p.hillLength - r[2], p.hillWidth - r[3],
+                 p.hillLength - r[0], p.hillWidth - r[1]]);     // the far flank
+    });
+
+    var rx0 = i * t.px, rx1 = (i + 1) * t.px, ry0 = j * t.py, ry1 = (j + 1) * t.py;
+    var cx = [rx0, rx1], cy = [ry0, ry1];
+    foot.forEach(function (r) { cx.push(r[0], r[2]); cy.push(r[1], r[3]); });
+    var xs = gridLines(rx0, rx1, cx, p.cell);
+    var ys = gridLines(ry0, ry1, cy, p.cell);
+
+    var pieces = [], a, b, k;
+    for (a = 0; a < xs.length - 1; a++) {
+      for (b = 0; b < ys.length - 1; b++) {
+        var mx = (xs[a] + xs[a + 1]) / 2, my = (ys[b] + ys[b + 1]) / 2;
+        // Ask the surface, not the block list. Proud blocks are grown and win
+        // where they overlap sunk ones, so the raw lists would hand the sunk
+        // body corners it does not actually own -- and corner-touching squares
+        // are exactly what will not close.
+        if (Math.abs(reliefAt(p, mx, my) - rel) > 1e-9) continue;
+        var cell = [[xs[a], ys[b]], [xs[a + 1], ys[b]],
+                    [xs[a + 1], ys[b + 1]], [xs[a], ys[b + 1]]];
+        var work = [cell];
+        [rel, rel - skin].forEach(function (lv) {
+          var next = [];
+          work.forEach(function (w) {
+            var halves = splitAtCrease(p, w, lv);
+            if (!halves) { next.push(w); return; }
+            if (halves[0].length >= 3) next.push(halves[0]);
+            if (halves[1].length >= 3) next.push(halves[1]);
+          });
+          work = next;
+        });
+        work.forEach(function (w) {
+          var c = dedupe(w);
+          if (c.length < 3) return;
+          // Where the riding surface clamps the relief, top and bottom collapse
+          // onto each other. The faces are not degenerate individually, they are
+          // coincident, so nothing downstream catches them -- drop the piece.
+          var gx = 0, gy = 0, q;
+          for (q = 0; q < c.length; q++) { gx += c[q][0]; gy += c[q][1]; }
+          gx /= c.length; gy /= c.length;
+          if (topOf(p, rel, gx, gy) - topOf(p, rel - skin, gx, gy) < 1e-6) return;
+          pieces.push({ poly: c, floor: 0, rel: rel, floorRel: rel - skin });
+        });
+      }
+    }
+    return buildSolid(p, pieces, null, [rel - skin, rel]);
+  }
+
+  // The distinct relief levels present, named, for multi-material export.
+  function decalLevels(p) {
+    var out = [], seen = {};
+    (p._decal || []).forEach(function (r) {
+      var k = r[4].toFixed(4);
+      if (seen[k]) return;
+      seen[k] = 1;
+      out.push({ rel: r[4],
+                 name: r[4] > p.decalRelief * 0.75 ? 'letters'
+                     : r[4] > 0 ? 'checker_a' : 'checker_b' });
+    });
+    return out;
   }
 
   // ------------------------------------------------------------ measures ----
@@ -1093,7 +1182,8 @@
               stlBinary: stlBinary, zip: zip,
               SPIKE: SPIKE, spikeSpots: spikeSpots, spikeMesh: spikeMesh,
               socketRadius: socketRadius, spikeRadius: spikeRadius,
-              decalRects: decalRects, reliefAt: reliefAt,
+              decalRects: decalRects, reliefAt: reliefAt, decalBody: decalBody,
+              decalLevels: decalLevels,
               threadCrest: threadCrest,
               xseamTabs: xseamTabs, yseamTabs: yseamTabs };
 
