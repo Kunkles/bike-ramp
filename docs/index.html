@@ -1659,11 +1659,17 @@ input[type=range]::-moz-range-thumb {
     ribThick: 12,         // mm, so a screw has real material either side of it
     screwsPerRib: 3,
     baseH: 6,             // mm, base strip height -- the bottom plane
-    baseW: 30,            // mm, base strip width
+    baseW: 20,            // mm, base strip width
     tenon: 4,             // mm, how far a rib foot drops into a strip
     fit: 0.25,            // mm, slop per side on tenon and mortise
     endRun: 80,           // mm, threshold run-in; it climbs the base too
     baseCount: 3,         // longitudinal strips across the width
+    channelW: 16,         // mm, width of the edge channel the sheet slides into
+    grooveDepth: 8,       // mm, how far the sheet's edge sits inside it
+    channelCap: 4,        // mm of material over the sheet, holding it down
+    channelWall: 5,       // mm spine thickness -- the rest is hollowed out
+    channelFoot: 2,       // mm tall foot, for a stable base on the ground
+    plyClear: 0.5,        // mm, slip fit so the sheet actually slides
     bedX: 250,            // mm, usable bed -- caps the base segment length
     bedY: 250
   };
@@ -1786,10 +1792,17 @@ input[type=range]::-moz-range-thumb {
   }
 
   // Where the two base strips run along the length.
+  function ribSpan(p) { return [p.channelW, p.hillWidth - p.channelW]; }
+  function sheetSpan(p) {
+    var inset = p.channelW - p.grooveDepth;
+    return [inset, p.hillWidth - inset];
+  }
+
   function baseYs(p) {
     var n = Math.max(2, p.baseCount || 3);
-    var a = Math.max(12, p.hillWidth * 0.10);
-    var travel = Math.max(0, p.hillWidth - 2 * a - p.baseW);
+    var rs = ribSpan(p), usable = rs[1] - rs[0];
+    var a = rs[0] + Math.max(10, usable * 0.08);
+    var travel = Math.max(0, (rs[1] - Math.max(10, usable * 0.08)) - a - p.baseW);
     var out = [], i;
     for (i = 0; i < n; i++) {
       var s = a + travel * i / (n - 1);
@@ -1828,17 +1841,18 @@ input[type=range]::-moz-range-thumb {
   // and the joint lands on the stiffest line rather than in mid-air.
   function ribCuts(p) {
     var bed = Math.max(80, Math.min(p.bedX || 250, p.bedY || 250));
-    if (p.hillWidth <= bed) return [[0, p.hillWidth]];
+    var rs = ribSpan(p);
+    if (rs[1] - rs[0] <= bed) return [[rs[0], rs[1]]];
     var ys = baseYs(p), mids = ys.map(function (r) { return (r[0] + r[1]) / 2; });
-    var cuts = [0], i, guard = 0;
-    while (p.hillWidth - cuts[cuts.length - 1] > bed && guard++ < 50) {
+    var cuts = [rs[0]], i, guard = 0;
+    while (rs[1] - cuts[cuts.length - 1] > bed && guard++ < 50) {
       var from = cuts[cuts.length - 1], pick = -1;
       for (i = 0; i < mids.length; i++)
         if (mids[i] > from + 20 && mids[i] - from <= bed) pick = mids[i];
       if (pick < 0) pick = from + bed;          // no strip in reach; plain cut
       cuts.push(pick);
     }
-    cuts.push(p.hillWidth);
+    cuts.push(rs[1]);
     var out = [];
     for (i = 0; i + 1 < cuts.length; i++) out.push([cuts[i], cuts[i + 1]]);
     return out;
@@ -1863,16 +1877,75 @@ input[type=range]::-moz-range-thumb {
       function (x, z, yy) { return [x, yy, z]; });
   }
 
+  // The edge channel the plywood slides into. Its section changes along the run
+  // because it follows the ramp, so it is lofted -- a fixed-topology outline
+  // whose z values track the deck, joined station to station.
+  //
+  //   8---------7        7,8 top of the outer wall
+  //   |         6--5     5,6 the lip that traps the sheet
+  //   |         |  |     4,5 groove, sheet slides in here
+  //   |         3--4
+  //   1---------2        1,2 on the ground
+  //
+  function channelSection(p, x) {
+    var zd = Math.max(p.baseH, ribTop(p, x));      // deck underside here
+    var t2 = p.sheet + p.plyClear;                 // slot height, slip fit
+    var zTop = zd + t2 + p.channelCap;
+    var W = p.channelW, g = W - p.grooveDepth;
+    var wall = p.channelWall, foot = p.channelFoot, floor = zd - 2;
+    // A C-section: foot on the ground, a spine up the outer face, and two arms
+    // reaching in to form the groove. Solid through here would be most of the
+    // channel's weight and none of its strength.
+    return [[0, 0], [W, 0], [W, foot], [wall, foot], [wall, floor], [W, floor],
+            [W, zd], [g, zd], [g, zd + t2], [W, zd + t2], [W, zTop], [0, zTop]];
+  }
+
+  function channelMesh(p, x0, x1, mirror) {
+    var m = mesh(), N = Math.max(8, Math.round((x1 - x0) / 6)), i, k;
+    var W = p.hillWidth;
+    var place = function (pt, x) {
+      var y = mirror ? W - pt[0] : pt[0];
+      return [x, y, pt[1]];
+    };
+    var secs = [];
+    for (i = 0; i <= N; i++) {
+      var x = x0 + (x1 - x0) * i / N;
+      secs.push(channelSection(p, x).map(function (q) { return place(q, x); }));
+    }
+    var n = secs[0].length;
+    for (i = 0; i + 1 < secs.length; i++) {
+      for (k = 0; k < n; k++) {
+        var j = (k + 1) % n;
+        if (mirror) m.quad(secs[i][k], secs[i][j], secs[i+1][j], secs[i+1][k]);
+        else        m.quad(secs[i][k], secs[i+1][k], secs[i+1][j], secs[i][j]);
+      }
+    }
+    // caps: the outline is concave at the groove, so triangulate it properly
+    var flat = channelSection(p, x0), e0 = earClip(flat.map(function (q) {
+      return [q[0], q[1]]; }));
+    [[0, x0, true], [secs.length - 1, x1, false]].forEach(function (c) {
+      var sec = channelSection(p, c[1]);
+      var e = earClip(sec.map(function (q) { return [q[0], q[1]]; }));
+      e.tris.forEach(function (tri) {
+        var a = place(e.pts[tri[0]], c[1]), b = place(e.pts[tri[1]], c[1]),
+            cc = place(e.pts[tri[2]], c[1]);
+        if (c[2] !== !!mirror) m.tri(a, b, cc); else m.tri(a, cc, b);
+      });
+    });
+    return m.tris;
+  }
+
   function thresholdMesh(p) {
+    var rs = ribSpan(p);
     return prism([[0, 0], [p.endRun, 0], [p.endRun, p.baseH + p.sheet]],
-                 0, p.hillWidth);
+                 rs[0], rs[1]);
   }
 
   // The bent sheet itself, for the preview: top follows the ramp surface,
   // underside follows the rib tops, so it visibly sits on them.
   function sheetMesh(p) {
     var m = mesh(), N = Math.max(60, Math.round(p.hillLength / 4)), i;
-    var W = p.hillWidth, L = p.hillLength;
+    var ss = sheetSpan(p), L = p.hillLength;
     // Where the ramp is shallower than the sheet is thick, the sheet lies on
     // the ground and its own thickness sets the surface -- so drive the top
     // face off the underside, not off the ramp profile.
@@ -1884,13 +1957,15 @@ input[type=range]::-moz-range-thumb {
     for (i = 0; i < N; i++) {
       var a = L * i / N, b = L * (i + 1) / N;
       var ta = top(a), tb = top(b), ba = bot(a), bb = bot(b);
-      m.quad([a,0,ta], [b,0,tb], [b,W,tb], [a,W,ta]);          // riding face
-      m.quad([a,0,ba], [a,W,ba], [b,W,bb], [b,0,bb]);          // underside
-      m.quad([a,0,ba], [b,0,bb], [b,0,tb], [a,0,ta]);          // y = 0 edge
-      m.quad([a,W,ba], [a,W,ta], [b,W,tb], [b,W,bb]);          // y = W edge
+      var y0 = ss[0], y1 = ss[1];
+      m.quad([a,y0,ta], [b,y0,tb], [b,y1,tb], [a,y1,ta]);      // riding face
+      m.quad([a,y0,ba], [a,y1,ba], [b,y1,bb], [b,y0,bb]);      // underside
+      m.quad([a,y0,ba], [b,y0,bb], [b,y0,tb], [a,y0,ta]);      // near edge
+      m.quad([a,y1,ba], [a,y1,ta], [b,y1,tb], [b,y1,bb]);      // far edge
     }
-    m.quad([0,0,bot(0)], [0,0,top(0)], [0,W,top(0)], [0,W,bot(0)]);
-    m.quad([L,0,bot(L)], [L,W,bot(L)], [L,W,top(L)], [L,0,top(L)]);
+    var q0 = ss[0], q1 = ss[1];
+    m.quad([0,q0,bot(0)], [0,q0,top(0)], [0,q1,top(0)], [0,q1,bot(0)]);
+    m.quad([L,q0,bot(L)], [L,q1,bot(L)], [L,q1,top(L)], [L,q0,top(L)]);
     return m.tris;
   }
 
@@ -1987,11 +2062,26 @@ input[type=range]::-moz-range-thumb {
                       tris: out, placed: tris });
       }
     }
-    return { params: p, ribs: ribs, strips: strips, step: step, screwY: sy,
+    // Edge channels, cut into bed-length runs like everything else.
+    var chan = [], maxCh = Math.max(120, (p.bedX || 250) - 20);
+    var nCh = Math.ceil(p.hillLength / maxCh);
+    for (si = 0; si < nCh; si++) {
+      var ca = p.hillLength * si / nCh, cb = p.hillLength * (si + 1) / nCh;
+      [0, 1].forEach(function (side) {
+        var tris = channelMesh(p, ca, cb, !!side), out = tris.slice();
+        for (k = 0; k < out.length; k += 3) out[k] -= ca;
+        chan.push({ name: 'channel_' + si + (side ? 'R' : 'L'),
+                    tris: out, placed: tris, side: side });
+      });
+    }
+    var ss = sheetSpan(p);
+    return { params: p, ribs: ribs, strips: strips, channels: chan,
+             step: step, screwY: sy,
              skipped: skipped, baseYs: ys,
              threshold: { name: 'threshold_x2', tris: thresholdMesh(p) },
              sheetTris: sheetMesh(p),
-             sheet: { length: p.hillLength, width: p.hillWidth, thick: p.sheet } };
+             sheet: { length: p.hillLength, width: ss[1] - ss[0],
+                      y0: ss[0], y1: ss[1], thick: p.sheet } };
   }
 
   // Everything the viewport draws, already positioned on the ground.
@@ -1999,6 +2089,7 @@ input[type=range]::-moz-range-thumb {
     var p = r.params, out = [];
     r.ribs.forEach(function (b) { out.push({ name: b.name, tris: b.placed, ci: 0, kind: 'rib' }); });
     r.strips.forEach(function (b) { out.push({ name: b.name, tris: b.placed, ci: 2, kind: 'base' }); });
+    r.channels.forEach(function (b) { out.push({ name: b.name, tris: b.placed, ci: 3, kind: 'channel' }); });
     // The thresholds lead UP to the deck from the ground, so they belong
     // outside the run. Left inside it they sit buried under the sheet and the
     // ramp just ends at a 9 mm cliff.
@@ -2017,7 +2108,8 @@ input[type=range]::-moz-range-thumb {
   // Filament for the printed parts only -- the sheet is not printed.
   function estimate(r, print) {
     var g = 0, h = 0, plates = 1;
-    r.ribs.concat(r.strips).concat([r.threshold, r.threshold]).forEach(function (b) {
+    r.ribs.concat(r.strips).concat(r.channels)
+      .concat([r.threshold, r.threshold]).forEach(function (b) {
       var e = BR.estimate(BR.measure(b.tris),
         Object.assign({ infill: 0.25, topLayers: 6, flow: 11, plates: 0 }, print || {}));
       g += e.grams; h += e.hours;
@@ -2595,7 +2687,7 @@ input[type=range]::-moz-range-thumb {
         var cols = new Float32Array(18);
         // In deck mode index 1 is the plywood, not a decal colour.
         var pal = state.build === 'deck'
-          ? [state.colours[0], '#8A5A2E', state.colours[2], state.colours[3]]
+          ? [state.colours[0], '#8A5A2E', state.colours[2], '#25E3D8']
           : state.colours;
         pal = pal.concat(['#20202A', '#F2EFE4']);   // bike frame, bike label
         for (var q = 0; q < 6; q++) {
@@ -2675,8 +2767,8 @@ input[type=range]::-moz-range-thumb {
     $('#ro-tiles-label').textContent = 'Printed parts';
     $('#ro-tiles').innerHTML = printed.length +
       '<span class="sub">' + d.ribs.length + ' ribs, ' + d.strips.length +
-      ' base, 2 ends</span>';
-    $('#ro-largest-label').textContent = 'Tallest rib';
+      ' base, ' + d.channels.length + ' channel, 2 ends</span>';
+    $('#ro-largest-label').textContent = 'Largest part';
     $('#ro-largest').innerHTML = big.m.size.map(function (v) { return Math.round(v); })
       .join(' \u00d7 ') + '<span class="sub">mm</span>';
     $('#ro-slope-label').textContent = 'Max slope';
@@ -3257,22 +3349,25 @@ input[type=range]::-moz-range-thumb {
       '  Cut it 10-20 mm long and trim after bending -- the sheet takes up a',
       '  little length as it curves.',
       '',
-      'MARKING THE UNDERSIDE',
+      'HOW IT GOES IN',
       '',
-      '  Rib centrelines, measured from one end (mm):',
-      '    ' + d.ribs.map(function (b) { return mm(b.x); }).join(', '),
+      '  No screws and no drilling. The sheet slides into a groove down each',
+      '  edge channel, from one end, like a drawer.',
       '',
-      '  In inches from the same end:',
-      '    ' + d.ribs.map(function (b) { return inch(b.x); }).join(', '),
+      '  The width above already allows for it: the sheet runs ' +
+        mm(p2.grooveDepth) + ' mm into',
+      '  each groove, so it is wider than the gap between the channels.',
       '',
-      '  Screw lines across the width, from one edge (mm):',
-      '    ' + d.screwY.map(mm).join(', '),
+      '  Feed it in from the low end and push. It has to bend as it goes -- that',
+      '  is expected. If it binds, ease the leading corners with sandpaper',
+      '  rather than forcing it.',
       '',
-      '  Three screws per rib, on the crossings of those two sets of lines.',
-      '  Drill 2.5 mm pilots through the ply AND into the rib. #8 x 3/4 in.',
-      '',
-      '  The rib spacing is not even across the sheet: near the troughs the',
-      '  deck comes down onto the base ladder and needs no rib.',
+      '  Slot height is ' + (p2.sheet + p2.plyClear).toFixed(1) + ' mm for a ' +
+        p2.sheet.toFixed(2) + ' mm sheet, so there is ' +
+        p2.plyClear.toFixed(1) + ' mm of slip.',
+      '  Nominal 1/8 in ply that measures over ' +
+        (p2.sheet + p2.plyClear).toFixed(1) + ' mm will not go in.',
+      '  Measure yours before printing the channels.',
       ''
     ].join('\n');
   }
@@ -3328,7 +3423,7 @@ input[type=range]::-moz-range-thumb {
         var m = BR.measure(b.tris);
         return { name: b.name + '.stl', data: BR.stlBinary(b.tris, m.min) };
       });
-      d.strips.forEach(function (b) {
+      d.strips.concat(d.channels).forEach(function (b) {
         var bm = BR.measure(b.tris);
         df.push({ name: b.name + '.stl', data: BR.stlBinary(b.tris, bm.min) });
       });

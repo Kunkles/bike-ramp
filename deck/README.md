@@ -1,114 +1,101 @@
-# Plywood deck ramp — v2
+# Plywood deck ramp — v3
 
-A 1100 × 250 mm ramp, two humps, 35 mm tall: a printed frame under a bent
-1/8" plywood deck.
+A 1100 × 250 mm ramp, two humps, 35 mm tall: a printed frame with the plywood
+deck **slid into a groove down each edge**. No screws, no drilling.
 
 |  | printed | time |
 |---|---|---|
-| this | **0.91 kg** | **~19 h** |
+| this | **1.19 kg** | **~24 h** |
 | same ramp printed solid | 2.29 kg | 48 h |
 
-## What changed from v1, and why it got heavier
+## How the sheet is held
 
-v1 was 0.30 kg and it was wrong. It was ten loose plates that only became rigid
-once the plywood was screwed on, and it asked you to drive screws into an 8 mm
-printed edge — which splits, and strips the first time you take it apart.
+It slides in from one end, like a drawer. Each edge channel carries a groove at
+deck height; the sheet runs 8 mm into each side, so it is wider than the gap
+between the channels and cannot lift out.
 
-v2 adds the two things that were missing:
+That replaces v2's "drill a pilot through the ply and into a 12 mm printed edge,
+three times per rib". Screws into PLA work once and strip on the second go, and
+the whole point of this thing is that a five-year-old ramp should come apart and
+go back together.
 
-- **A base ladder.** Three strips run the full length with a mortise under every
-  rib; each rib has matching feet. The frame stands square and holds its own
-  spacing before the ply goes anywhere near it. The middle strip also halves the
-  sheet's unsupported span across the width near the troughs, 110 mm down to 55.
-- **12 mm ribs**, up from 8, so a screw has real material either side of it.
+The channels also cap the exposed plywood edges, which were a known limit in v1
+and v2.
 
-That is where the extra 0.6 kg went. It is the difference between a jig and a
-structure, and it is still 2.5× lighter and under half the time of solid.
+**Slot height is 3.7 mm for a 3.18 mm sheet — 0.5 mm of slip.** Nominal 1/8"
+plywood varies. Measure yours before printing 10 channel segments: anything over
+3.7 mm will not go in.
 
 ## Why this geometry
 
 **Hump spacing is 550 mm because that is the Strider 12's wheelbase.** Both
-wheels crest together and the whole bike lifts, so he feels ~97% of the 35 mm.
-A single 600 mm hump gives only half its height — when the front wheel is on the
-crest the rear is still on flat ground. Turn the bike on in the generator's
-viewport and you can see it spans the whole of a 600 mm ramp.
+wheels crest together and the whole bike lifts, so he feels ~97% of the 35 mm. A
+single 600 mm hump gives only half its height — when the front wheel is on the
+crest the rear is still on flat ground.
 
 **Don't stretch to 1100 mm humps.** At twice the wheelbase one wheel sits in a
 trough while the other is on a crest, they cancel, and it feels flat.
 
 **Ribs are 91.7 mm apart** — inside the 108 mm limit for 1/8" ply to stay under
-2 mm sag at a 200 N wheel load, and placed so a rib lands on each crest, where
-load and bend are worst.
+2 mm sag at a 200 N wheel load, and placed so a rib lands on each crest.
 
-## Parts — 32 in total
+## Parts — 42 in total
 
-| file | size | qty |
+| file | what | qty |
 |---|---|---|
-| `rib_01`, `rib_04` | 250 × 12 × 30 mm | 1 each |
-| `rib_00`, `rib_02`, `rib_03`, `rib_05` | 250 × 12 × 21 mm | 1 each |
-| `base_0L` … `base_7R` | 101–220 × 30 × 6 mm | 24 (3 lines) |
-| `threshold_x2` | 250 × 80 × 9 mm | **2** |
+| `rib_00` … `rib_05` | cross ribs, all different heights | 6 |
+| `base_0a` … `base_7c` | base ladder, three lines | 24 |
+| `channel_0L` … `channel_4R` | edge channels, the sheet slides in these | 10 |
+| `threshold_x2` | end run-ups | **2** |
 
-Ribs are all different heights and are **not** interchangeable. Print them
-**standing on edge as oriented**, so ply screws drive into the layers rather
-than between them. Brim them. Base strips print flat.
-
-3 walls, 25% gyroid, 6 top layers — none of these is a riding surface.
+Ribs are **not** interchangeable. Print them standing on edge as oriented; base
+strips and channels print flat. 3 walls, 25% gyroid, 6 top layers — none of
+these is a riding surface.
 
 ## Plywood
 
-One piece, **1100 × 250 mm**, 1/8" (3.2 mm), grain along the length.
+One piece, **1100 × 234 mm**, 1/8" (3.2 mm), grain along the length.
+
+Note the 234: it is *not* the ramp width. The sheet is narrower than the ramp
+overall and wider than the gap between the channels, because it sits 8 mm inside
+each groove. The generator's cut list gives the exact number for your settings.
 
 ## Assembly
 
-1. Lay the base strips end to end in two lines. Joints fall midway between ribs
-   so a rib always pins them.
-2. Drop each rib's feet into its mortises. Rib stations from one end (mm):
-   **183, 275, 367, 733, 825, 917** — tallest at 275 and 825.
-   Ribs only exist where the deck is airborne. Near the troughs the sheet comes
-   down onto the base ladder itself, so there is nothing there to hold up; the
-   longest unsupported run works out at 87 mm, inside the 108 mm sag limit.
-3. Bend the ply over the frame and screw down **from the crests outward**.
-4. Three screws per rib at **20 / 125 / 230 mm** across. Drill a 2.5 mm pilot
-   through ply *and* into the rib. **#8 × 3/4"** pan head.
-5. Fit a threshold at each end. They sit **outside** the ramp, on the ground,
-   with their tall edge butted against the deck — they are the run-up onto it,
-   not part of it. Screw down through each into the ground or a stake.
-
-### If you want it to survive being taken apart
-
-Screws into PLA are fine once. If you expect to disassemble it, drill the rib
-tops 4.2 mm and fit **M4 heat-set inserts**, then use M4 machine screws. That is
-the difference between a joint that lasts one rebuild and one that lasts many.
+1. Lay the base strips end to end in three lines.
+2. Drop each rib's feet into its mortises. Stations from one end (mm):
+   **183, 275, 367, 733, 825, 917** — tallest at 275 and 825. There is no rib
+   between 367 and 733; that is the middle trough, where the deck comes down on
+   the base ladder.
+3. Set a channel run down each edge, grooves facing in.
+4. **Feed the sheet in from the low end and push.** It bends as it goes; that is
+   expected. If it binds, ease the leading corners with sandpaper — don't force
+   it.
+5. Butt a threshold against each end, outside the ramp.
 
 ## Check before he rides it
 
 1. **Stand on a crest.** More than ~3 mm sag means thin ply or a rib not seated.
 2. **Every rib bearing** — no rattle when you press between ribs.
-3. **No step at either threshold.** The deck sits 9.2 mm up — 6 mm of base
-   ladder plus the 3.2 mm sheet — and each threshold climbs that over an 80 mm
-   run (6.6 deg). Butt them tight to the deck edge: this is the one place on the
-   whole ramp a wheel can catch.
-4. Screw heads flush; ease the exposed ply edges with sandpaper.
+3. **No step at either threshold.** The deck sits 9.2 mm up; each threshold
+   climbs that over an 80 mm run. This is the one place a wheel can catch.
+4. **Sheet fully home at both ends**, not standing proud of a channel.
 
 ## Known limits
 
-- **The ply edges are exposed along both sides** — you asked for a hard dropoff
-  in v1 and that still stands. No side rails yet.
+- **Untested in plastic.** Rib spacing comes from a beam calculation assuming
+  9 GPa plywood and a 200 N wheel load. Garage ply varies.
+- **The slide-in fit is unproven.** 0.5 mm of slip over a 1100 mm curved run is
+  a guess. Print **one channel segment and one rib**, and try a plywood offcut
+  in it before printing the other nine.
 - **No ground spikes.** On grass, stake the thresholds.
-- **Untested in plastic.** The 108 mm rib spacing comes from a beam calculation
-  assuming 9 GPa plywood and a 200 N wheel load. Garage ply varies. Print two
-  ribs and a base strip, screw an offcut across them, and stand on it before
-  committing to the whole build.
 - Generated from `webapp/deck.js`; the solid path has an OpenSCAD cross-check
   and this does not.
 
 ## Wider than your bed
 
-A rib spans the whole width and prints standing on edge, so its footprint is as
-long as the ramp is wide. Past the bed it is cut over the centre of a base strip
-— the mortise there holds both halves and the joint lands on the stiffest line
-rather than in mid-air. Those parts are named `rib_00a`, `rib_00b` and so on;
-they are not interchangeable between stations either. Base strips are cut to the
-bed the same way, so both follow whichever printer is selected in the
-generator.
+A rib spans between the channels and prints standing on edge, so its footprint
+is as long as the ramp is wide. Past the bed it is cut over the centre of a base
+strip, where the mortise holds both halves. Those parts are named `rib_00a`,
+`rib_00b`. Base strips and channels are cut to the bed the same way, so all
+three follow whichever printer is selected in the generator.

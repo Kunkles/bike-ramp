@@ -560,7 +560,7 @@
         var cols = new Float32Array(18);
         // In deck mode index 1 is the plywood, not a decal colour.
         var pal = state.build === 'deck'
-          ? [state.colours[0], '#8A5A2E', state.colours[2], state.colours[3]]
+          ? [state.colours[0], '#8A5A2E', state.colours[2], '#25E3D8']
           : state.colours;
         pal = pal.concat(['#20202A', '#F2EFE4']);   // bike frame, bike label
         for (var q = 0; q < 6; q++) {
@@ -640,8 +640,8 @@
     $('#ro-tiles-label').textContent = 'Printed parts';
     $('#ro-tiles').innerHTML = printed.length +
       '<span class="sub">' + d.ribs.length + ' ribs, ' + d.strips.length +
-      ' base, 2 ends</span>';
-    $('#ro-largest-label').textContent = 'Tallest rib';
+      ' base, ' + d.channels.length + ' channel, 2 ends</span>';
+    $('#ro-largest-label').textContent = 'Largest part';
     $('#ro-largest').innerHTML = big.m.size.map(function (v) { return Math.round(v); })
       .join(' \u00d7 ') + '<span class="sub">mm</span>';
     $('#ro-slope-label').textContent = 'Max slope';
@@ -1222,22 +1222,25 @@
       '  Cut it 10-20 mm long and trim after bending -- the sheet takes up a',
       '  little length as it curves.',
       '',
-      'MARKING THE UNDERSIDE',
+      'HOW IT GOES IN',
       '',
-      '  Rib centrelines, measured from one end (mm):',
-      '    ' + d.ribs.map(function (b) { return mm(b.x); }).join(', '),
+      '  No screws and no drilling. The sheet slides into a groove down each',
+      '  edge channel, from one end, like a drawer.',
       '',
-      '  In inches from the same end:',
-      '    ' + d.ribs.map(function (b) { return inch(b.x); }).join(', '),
+      '  The width above already allows for it: the sheet runs ' +
+        mm(p2.grooveDepth) + ' mm into',
+      '  each groove, so it is wider than the gap between the channels.',
       '',
-      '  Screw lines across the width, from one edge (mm):',
-      '    ' + d.screwY.map(mm).join(', '),
+      '  Feed it in from the low end and push. It has to bend as it goes -- that',
+      '  is expected. If it binds, ease the leading corners with sandpaper',
+      '  rather than forcing it.',
       '',
-      '  Three screws per rib, on the crossings of those two sets of lines.',
-      '  Drill 2.5 mm pilots through the ply AND into the rib. #8 x 3/4 in.',
-      '',
-      '  The rib spacing is not even across the sheet: near the troughs the',
-      '  deck comes down onto the base ladder and needs no rib.',
+      '  Slot height is ' + (p2.sheet + p2.plyClear).toFixed(1) + ' mm for a ' +
+        p2.sheet.toFixed(2) + ' mm sheet, so there is ' +
+        p2.plyClear.toFixed(1) + ' mm of slip.',
+      '  Nominal 1/8 in ply that measures over ' +
+        (p2.sheet + p2.plyClear).toFixed(1) + ' mm will not go in.',
+      '  Measure yours before printing the channels.',
       ''
     ].join('\n');
   }
@@ -1293,7 +1296,7 @@
         var m = BR.measure(b.tris);
         return { name: b.name + '.stl', data: BR.stlBinary(b.tris, m.min) };
       });
-      d.strips.forEach(function (b) {
+      d.strips.concat(d.channels).forEach(function (b) {
         var bm = BR.measure(b.tris);
         df.push({ name: b.name + '.stl', data: BR.stlBinary(b.tris, bm.min) });
       });
