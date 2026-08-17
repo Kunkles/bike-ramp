@@ -2175,6 +2175,12 @@ input[type=range]::-moz-range-thumb {
                      humps:2, bevelRun:90 },
     'Medium':      { shape:'roller', hillLength:920, hillWidth:330, hillHeight:90,
                      humps:1, crestFlat:30, bevelRun:80 },
+    'Up (med)':    { shape:'rise', hillLength:445, hillWidth:330, hillHeight:90,
+                     bevelRun:80 },
+    'Flat (med)':  { shape:'flat', hillLength:400, hillWidth:330, hillHeight:90,
+                     bevelRun:80 },
+    'Down (med)':  { shape:'fall', hillLength:445, hillWidth:330, hillHeight:90,
+                     bevelRun:80 },
     'Wide & low':  { shape:'roller', hillLength:700, hillWidth:480, hillHeight:35,
                      humps:1, bevelRun:130 },
     'Step drop':   { shape:'drop', hillLength:500, hillWidth:300, hillHeight:50,
@@ -2191,13 +2197,16 @@ input[type=range]::-moz-range-thumb {
     { v:'kicker', label:'Curved jump',
       hint:'Curved launch, steepest at the lip, vertical behind it.' },
     { v:'rise',   label:'Module: up',
-      hint:'Ground to full height, dovetailed at the top so a flat or a down ' +
-           'ramp bolts straight on. Both ends leave at zero slope.' },
+      hint:'Ground to full height, joined at the top so a flat or a down ramp ' +
+           'goes straight on. A module climbs the whole height on its own, so ' +
+           'use HALF the length of the roller you are matching \u2014 a 920 mm ' +
+           'roller is up 445 + down 445, same slope and the same total cost.' },
     { v:'flat',   label:'Module: flat',
       hint:'A level table at full height, dovetailed both ends. Add one between ' +
            'an up and a down to make a longer table top.' },
     { v:'fall',   label:'Module: down',
-      hint:'Full height back to the ground, dovetailed at the top end.' }
+      hint:'Full height back to the ground, joined at the top end. Same length ' +
+           'rule as the up ramp: half the roller you are matching.' }
   ];
 
   // Nominal bed sizes; BED_MARGIN comes off each axis for clearance at the edge.
