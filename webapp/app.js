@@ -1064,16 +1064,21 @@
     d1.type = 'button';
     d1.innerHTML = 'Download all tiles <span class="k">.zip</span>';
     d1.addEventListener('click', downloadZip);
-    var d3 = el('button', 'btn primary');
+    var d0 = el('button', 'btn primary');
+    d0.type = 'button';
+    d0.innerHTML = 'Download project <span class="k">.3mf</span>';
+    d0.title = 'Every plate in one Bambu Studio project';
+    d0.addEventListener('click', downloadProject);
+    var d3 = el('button', 'btn');
     d3.type = 'button';
-    d3.innerHTML = 'Download plates <span class="k">.3mf</span>';
-    d3.title = 'One 3MF per plate, parts already arranged on the bed';
+    d3.innerHTML = 'Plates separately <span class="k">.zip</span>';
+    d3.title = 'One plain 3MF per plate, for other slicers';
     d3.addEventListener('click', downloadPlates);
     var d2 = el('button', 'btn');
     d2.type = 'button';
     d2.innerHTML = 'Download OpenSCAD source <span class="k">.scad</span>';
     d2.addEventListener('click', downloadScad);
-    ag.appendChild(d3); ag.appendChild(d1); ag.appendChild(d2);
+    ag.appendChild(d0); ag.appendChild(d3); ag.appendChild(d1); ag.appendChild(d2);
     host.appendChild(ag);
 
     var f = el('p', 'foot');
@@ -1342,15 +1347,32 @@
   // One plain 3MF per plate, parts already arranged inside the bed. Multi-plate
   // projects are a Bambu extension with no published schema, so this stays
   // inside the part of the format that is actually specified.
-  function downloadPlates() {
+  function packedPlates() {
     var parts = printableParts();
-    var plates = TMF.pack(parts, state.bedX, state.bedY, 6);
-    var jobs = plates.map(function (pl, n) {
-      var objs = pl.items.map(function (it) {
+    return TMF.pack(parts, state.bedX, state.bedY, 6).map(function (pl) {
+      return pl.items.map(function (it) {
         return { name: it.part.name, tris: it.part.tris, rot: it.rot,
-                 at: [it.at[0] + (it.rot ? it.part.size[1] : 0), it.at[1], 0] };
+                 at: [it.at[0] + (it.rot ? it.part.size[1] : 0), it.at[1]] };
       });
-      return TMF.build3mf(objs).then(function (buf) {
+    });
+  }
+
+  // Every plate in one Bambu project, which is what you actually want to open.
+  function downloadProject() {
+    var plates = packedPlates();
+    TMF.bambuProject(plates, state.bedX).then(function (buf) {
+      save(new Blob([buf], { type: 'model/3mf' }), slug() + '.3mf');
+    });
+  }
+
+  // One plain 3MF per plate, for slicers that are not Bambu Studio.
+  function downloadPlates() {
+    var plates = packedPlates();
+    var jobs = plates.map(function (objs, n) {
+      return TMF.build3mf(objs.map(function (o) {
+        return { name: o.name, tris: o.tris, rot: o.rot,
+                 at: [o.at[0], o.at[1], 0] };
+      })).then(function (buf) {
         return { name: 'plate_' + (n + 1) + '_of_' + plates.length + '.3mf',
                  data: buf };
       });

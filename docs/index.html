@@ -2213,10 +2213,13 @@ input[type=range]::-moz-range-thumb {
 //  the size of binary STL -- which is why entries are deflated rather than
 //  stored, and why vertices are welded first.
 //
-//  Plates are NOT part of the 3MF spec; multi-plate projects are a Bambu
-//  extension with an undocumented schema. So instead of guessing at that, each
-//  plate is written as its own plain 3MF with the parts already arranged inside
-//  the bed. Same outcome, using only the part of the format that is specified.
+//  Plates are not part of the 3MF spec. Two outputs, then:
+//
+//    build3mf()      a plain 3MF -- one per plate, parts arranged in the bed.
+//                    Only uses what the spec defines, so any slicer takes it.
+//    bambuProject()  every plate in one file, via Metadata/model_settings.config.
+//                    That schema was read off a project Bambu Studio saved from
+//                    these files rather than guessed at.
 //
 //  Runs in node (module.exports) and in the browser (window.BikeRamp3MF).
 // ---------------------------------------------------------------------------
@@ -2445,7 +2448,78 @@ input[type=range]::-moz-range-thumb {
     ]);
   }
 
-  var api = { build3mf: build3mf, modelXml: modelXml, pack: pack, weld: weld };
+
+  // ------------------------------------------------- Bambu project (3mf) ---
+  // A Bambu project is a 3MF plus Metadata/model_settings.config, which names
+  // the objects and says which plate each one belongs to. The schema here was
+  // read off a project Bambu Studio saved from these files, not guessed.
+  //
+  // Studio lays plates out in a grid in world coordinates -- measured at a
+  // 307 mm stride, three across, rows running in -y, on a 256 mm bed. That
+  // stride is the one empirical constant; the plate assignment below is
+  // explicit, so it is what Studio actually reads.
+  var PLATE_COLS = 3;
+  function plateOrigin(n, bed) {
+    var stride = bed + 57, col = n % PLATE_COLS, row = Math.floor(n / PLATE_COLS);
+    return [col * stride, -row * stride];
+  }
+
+  function modelSettings(plates) {
+    var out = ['<?xml version="1.0" encoding="UTF-8"?>\n<config>\n'], id = 1;
+    var ids = [];
+    plates.forEach(function (pl) {
+      var row = [];
+      pl.forEach(function (o) {
+        out.push('  <object id="' + id + '">\n' +
+                 '    <metadata key="name" value="' + esc(o.name) + '"/>\n' +
+                 '    <metadata key="extruder" value="1"/>\n' +
+                 '    <part id="1" subtype="normal_part">\n' +
+                 '      <metadata key="name" value="' + esc(o.name) + '"/>\n' +
+                 '      <metadata key="matrix" value="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1"/>\n' +
+                 '    </part>\n  </object>\n');
+        row.push(id); id++;
+      });
+      ids.push(row);
+    });
+    ids.forEach(function (row, n) {
+      out.push('  <plate>\n    <metadata key="plater_id" value="' + (n + 1) + '"/>\n' +
+               '    <metadata key="plater_name" value=""/>\n' +
+               '    <metadata key="locked" value="false"/>\n');
+      row.forEach(function (oid) {
+        out.push('    <model_instance>\n' +
+                 '      <metadata key="object_id" value="' + oid + '"/>\n' +
+                 '      <metadata key="instance_id" value="0"/>\n' +
+                 '    </model_instance>\n');
+      });
+      out.push('  </plate>\n');
+    });
+    out.push('</config>\n');
+    return out.join('');
+  }
+
+  // plates: [[{name, tris, at:[x,y], rot}], ...]
+  function bambuProject(plates, bed) {
+    var flat = [], n = 0;
+    plates.forEach(function (pl, pi) {
+      var org = plateOrigin(pi, bed);
+      pl.forEach(function (o) {
+        flat.push({ name: o.name, tris: o.tris, rot: o.rot,
+                    at: [org[0] + o.at[0], org[1] + o.at[1], 0] });
+      });
+      n += pl.length;
+    });
+    var enc = new TextEncoder();
+    return zipDeflated([
+      { name: '[Content_Types].xml', data: enc.encode(CONTENT_TYPES) },
+      { name: '_rels/.rels', data: enc.encode(RELS) },
+      { name: '3D/3dmodel.model', data: enc.encode(modelXml(flat)) },
+      { name: 'Metadata/model_settings.config',
+        data: enc.encode(modelSettings(plates)) }
+    ]);
+  }
+
+  var api = { build3mf: build3mf, modelXml: modelXml, pack: pack, weld: weld,
+              bambuProject: bambuProject };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.BikeRamp3MF = api;
 })(this);
@@ -3517,16 +3591,21 @@ input[type=range]::-moz-range-thumb {
     d1.type = 'button';
     d1.innerHTML = 'Download all tiles <span class="k">.zip</span>';
     d1.addEventListener('click', downloadZip);
-    var d3 = el('button', 'btn primary');
+    var d0 = el('button', 'btn primary');
+    d0.type = 'button';
+    d0.innerHTML = 'Download project <span class="k">.3mf</span>';
+    d0.title = 'Every plate in one Bambu Studio project';
+    d0.addEventListener('click', downloadProject);
+    var d3 = el('button', 'btn');
     d3.type = 'button';
-    d3.innerHTML = 'Download plates <span class="k">.3mf</span>';
-    d3.title = 'One 3MF per plate, parts already arranged on the bed';
+    d3.innerHTML = 'Plates separately <span class="k">.zip</span>';
+    d3.title = 'One plain 3MF per plate, for other slicers';
     d3.addEventListener('click', downloadPlates);
     var d2 = el('button', 'btn');
     d2.type = 'button';
     d2.innerHTML = 'Download OpenSCAD source <span class="k">.scad</span>';
     d2.addEventListener('click', downloadScad);
-    ag.appendChild(d3); ag.appendChild(d1); ag.appendChild(d2);
+    ag.appendChild(d0); ag.appendChild(d3); ag.appendChild(d1); ag.appendChild(d2);
     host.appendChild(ag);
 
     var f = el('p', 'foot');
@@ -3795,15 +3874,32 @@ input[type=range]::-moz-range-thumb {
   // One plain 3MF per plate, parts already arranged inside the bed. Multi-plate
   // projects are a Bambu extension with no published schema, so this stays
   // inside the part of the format that is actually specified.
-  function downloadPlates() {
+  function packedPlates() {
     var parts = printableParts();
-    var plates = TMF.pack(parts, state.bedX, state.bedY, 6);
-    var jobs = plates.map(function (pl, n) {
-      var objs = pl.items.map(function (it) {
+    return TMF.pack(parts, state.bedX, state.bedY, 6).map(function (pl) {
+      return pl.items.map(function (it) {
         return { name: it.part.name, tris: it.part.tris, rot: it.rot,
-                 at: [it.at[0] + (it.rot ? it.part.size[1] : 0), it.at[1], 0] };
+                 at: [it.at[0] + (it.rot ? it.part.size[1] : 0), it.at[1]] };
       });
-      return TMF.build3mf(objs).then(function (buf) {
+    });
+  }
+
+  // Every plate in one Bambu project, which is what you actually want to open.
+  function downloadProject() {
+    var plates = packedPlates();
+    TMF.bambuProject(plates, state.bedX).then(function (buf) {
+      save(new Blob([buf], { type: 'model/3mf' }), slug() + '.3mf');
+    });
+  }
+
+  // One plain 3MF per plate, for slicers that are not Bambu Studio.
+  function downloadPlates() {
+    var plates = packedPlates();
+    var jobs = plates.map(function (objs, n) {
+      return TMF.build3mf(objs.map(function (o) {
+        return { name: o.name, tris: o.tris, rot: o.rot,
+                 at: [o.at[0], o.at[1], 0] };
+      })).then(function (buf) {
         return { name: 'plate_' + (n + 1) + '_of_' + plates.length + '.3mf',
                  data: buf };
       });

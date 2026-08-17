@@ -103,16 +103,19 @@ intend to extend later.
 
 ## Getting it onto the printer
 
-**Download plates .3mf** gives one 3MF per plate with the parts already arranged
-inside the bed, named, and in millimetres. Open each and slice it.
+**Download project .3mf** is the one you want: every plate in a single Bambu
+Studio project, parts arranged in the bed, named, in millimetres. Open it and
+all the plates are there.
 
-Multi-plate projects are a Bambu extension with no published schema, so rather
-than guess at it each plate is a plain 3MF -- the part of the format that is
-actually specified. It carries geometry and placement, not print settings, so
-set walls / top layers / infill yourself the first time.
+**Plates separately .zip** gives one plain 3MF per plate instead — only what the
+3MF spec defines, so it opens in any slicer.
 
-**Download all tiles .zip** still gives the individual STLs if you would rather
-arrange them by hand.
+**Download all tiles .zip** still gives individual STLs to arrange by hand.
+
+None of them carry print settings, so set walls / top layers / infill yourself
+the first time. For a deck build nothing you print is a riding surface, so a
+coarse layer height costs you nothing: 0.28 mm rather than 0.12 roughly halves
+the time.
 
 ## Known limits
 
@@ -124,10 +127,11 @@ arrange them by hand.
 - **No ground spikes.** On grass, stake the thresholds.
 - Generated from `webapp/deck.js`; the solid path has an OpenSCAD cross-check
   and this does not.
-- **The 3MF has not been opened in Bambu Studio.** It round-trips correctly --
-  every entry inflates, the XML re-parses, all triangles survive, everything
-  lands inside the bed -- but that is structural validity, not a slicer having
-  accepted it.
+- The per-plate 3MF is confirmed: Bambu Studio opened it, kept the object names,
+  and saved back all 52,956 triangles unchanged. The **single-file project** is
+  newer and has not been through Studio yet -- the plate schema came from a
+  project Studio saved, but the plate grid stride (bed + 57 mm) is the one
+  measured constant in it.
 - **The module joint is untested in plastic.** It resists the modules sliding
   apart and keeps them level, but nothing stops a determined lift. If it works
   loose in use, a strap or a stake through the end thresholds will hold it.
