@@ -2,6 +2,7 @@
   'use strict';
   var BR = window.BikeRamp;
   var DK = window.BikeRampDeck;
+  var TMF = window.BikeRamp3MF;
 
   // ------------------------------------------------------------------ state --
   var state = null, result = null;
@@ -1063,11 +1064,16 @@
     d1.type = 'button';
     d1.innerHTML = 'Download all tiles <span class="k">.zip</span>';
     d1.addEventListener('click', downloadZip);
+    var d3 = el('button', 'btn primary');
+    d3.type = 'button';
+    d3.innerHTML = 'Download plates <span class="k">.3mf</span>';
+    d3.title = 'One 3MF per plate, parts already arranged on the bed';
+    d3.addEventListener('click', downloadPlates);
     var d2 = el('button', 'btn');
     d2.type = 'button';
     d2.innerHTML = 'Download OpenSCAD source <span class="k">.scad</span>';
     d2.addEventListener('click', downloadScad);
-    ag.appendChild(d1); ag.appendChild(d2);
+    ag.appendChild(d3); ag.appendChild(d1); ag.appendChild(d2);
     host.appendChild(ag);
 
     var f = el('p', 'foot');
@@ -1308,6 +1314,55 @@
     ].join('\n');
   }
 
+  // Every part that gets printed, moved to the origin with its footprint, so
+  // the packer can lay plates out.
+  function printableParts() {
+    var out = [];
+    function add(name, tris) {
+      var m = BR.measure(tris), t = tris.slice(), i;
+      for (i = 0; i < t.length; i += 3) {
+        t[i] -= m.min[0]; t[i + 1] -= m.min[1]; t[i + 2] -= m.min[2];
+      }
+      out.push({ name: name, tris: t, size: m.size });
+    }
+    if (state.build === 'deck') {
+      var d = result.deck;
+      d.ribs.forEach(function (b) { add(b.name, b.tris); });
+      d.strips.forEach(function (b) { add(b.name, b.tris); });
+      d.channels.forEach(function (b) { add(b.name, b.tris); });
+      d.thresholds.forEach(function (b) { add(b.name, b.tris); });
+    } else {
+      result.tiles.forEach(function (t) { add(t.name, t.tris); });
+      if (state.spikeLen && result.spikes)
+        add('spike_x' + result.spikes, BR.spikeMesh(state));
+    }
+    return out;
+  }
+
+  // One plain 3MF per plate, parts already arranged inside the bed. Multi-plate
+  // projects are a Bambu extension with no published schema, so this stays
+  // inside the part of the format that is actually specified.
+  function downloadPlates() {
+    var parts = printableParts();
+    var plates = TMF.pack(parts, state.bedX, state.bedY, 6);
+    var jobs = plates.map(function (pl, n) {
+      var objs = pl.items.map(function (it) {
+        return { name: it.part.name, tris: it.part.tris, rot: it.rot,
+                 at: [it.at[0] + (it.rot ? it.part.size[1] : 0), it.at[1], 0] };
+      });
+      return TMF.build3mf(objs).then(function (buf) {
+        return { name: 'plate_' + (n + 1) + '_of_' + plates.length + '.3mf',
+                 data: buf };
+      });
+    });
+    Promise.all(jobs).then(function (files) {
+      var enc = new TextEncoder();
+      files.push({ name: 'README.txt',
+                   data: enc.encode(state.build === 'deck' ? deckReadme() : readme()) });
+      save(BR.zip(files), slug() + '-plates.zip');
+    });
+  }
+
   function downloadZip() {
     var enc = new TextEncoder();
     if (state.build === 'deck') {
@@ -1320,9 +1375,10 @@
         var bm = BR.measure(b.tris);
         df.push({ name: b.name + '.stl', data: BR.stlBinary(b.tris, bm.min) });
       });
-      var tm = BR.measure(d.threshold.tris);
-      df.push({ name: 'threshold_x2.stl',
-                data: BR.stlBinary(d.threshold.tris, tm.min) });
+      d.thresholds.forEach(function (th) {
+        var tm = BR.measure(th.tris);
+        df.push({ name: th.name + '.stl', data: BR.stlBinary(th.tris, tm.min) });
+      });
       df.push({ name: 'PLYWOOD-CUT-' + Math.round(d.sheet.length) + 'x' +
                       Math.round(d.sheet.width) + 'mm.txt',
                 data: enc.encode(deckCutSheet()) });

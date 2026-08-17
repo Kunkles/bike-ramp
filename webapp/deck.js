@@ -328,10 +328,10 @@
     return m.tris;
   }
 
-  function thresholdMesh(p) {
-    var rs = ribSpan(p);
-    return prism([[0, 0], [p.endRun, 0], [p.endRun, p.baseH + p.sheet]],
-                 rs[0], rs[1]);
+  // Split across the width on the same cuts the ribs use -- at full width this
+  // is wider than the bed, and unlike every other part nothing was splitting it.
+  function thresholdMesh(p, y0, y1) {
+    return prism([[0, 0], [p.endRun, 0], [p.endRun, p.baseH + p.sheet]], y0, y1);
   }
 
   // The bent sheet itself, for the preview: top follows the ramp surface,
@@ -474,7 +474,12 @@
     return { params: p, ribs: ribs, strips: strips, channels: chan,
              step: step, screwY: sy,
              skipped: skipped, baseYs: ys,
-             threshold: { name: 'threshold_x2', tris: thresholdMesh(p) },
+             thresholds: ribCuts(p).map(function (seg, q) {
+               return { name: 'threshold_x2' + (ribCuts(p).length > 1 ?
+                          'abcdefgh'.charAt(q) : ''),
+                        y0: seg[0], y1: seg[1],
+                        tris: thresholdMesh(p, seg[0], seg[1]) };
+             }),
              sheetTris: sheetMesh(p),
              sheet: { length: p.hillLength, width: ss[1] - ss[0],
                       y0: ss[0], y1: ss[1], thick: p.sheet } };
@@ -489,14 +494,16 @@
     // The thresholds lead UP to the deck from the ground, so they belong
     // outside the run. Left inside it they sit buried under the sheet and the
     // ramp just ends at a 9 mm cliff.
-    var th = r.threshold.tris, a = th.slice(), b2 = th.slice(), i;
-    for (i = 0; i < a.length; i += 3) a[i] -= p.endRun;
-    for (i = 0; i < b2.length; i += 3) b2[i] = p.hillLength + p.endRun - b2[i];
-    // match the sheet's display lift so the joint reads flush in the preview
-    for (i = 2; i < a.length; i += 3) a[i] += 0.25;
-    for (i = 2; i < b2.length; i += 3) b2[i] += 0.25;
-    out.push({ name: 'threshold (near)', tris: a, ci: 0, kind: 'end', dir: -1 });
-    out.push({ name: 'threshold (far)', tris: b2, ci: 0, kind: 'end', dir: 1 });
+    r.thresholds.forEach(function (th, q) {
+      var a = th.tris.slice(), b2 = th.tris.slice(), i;
+      for (i = 0; i < a.length; i += 3) a[i] -= p.endRun;
+      for (i = 0; i < b2.length; i += 3) b2[i] = p.hillLength + p.endRun - b2[i];
+      // match the sheet's display lift so the joint reads flush in the preview
+      for (i = 2; i < a.length; i += 3) a[i] += 0.25;
+      for (i = 2; i < b2.length; i += 3) b2[i] += 0.25;
+      out.push({ name: 'threshold near ' + q, tris: a, ci: 0, kind: 'end', dir: -1 });
+      out.push({ name: 'threshold far ' + q, tris: b2, ci: 0, kind: 'end', dir: 1 });
+    });
     out.push({ name: 'plywood deck', tris: r.sheetTris, ci: 1, sheet: true });
     return out;
   }
@@ -505,7 +512,7 @@
   function estimate(r, print) {
     var g = 0, h = 0, plates = 1;
     r.ribs.concat(r.strips).concat(r.channels)
-      .concat([r.threshold, r.threshold]).forEach(function (b) {
+      .concat(r.thresholds).concat(r.thresholds).forEach(function (b) {
       var e = BR.estimate(BR.measure(b.tris),
         Object.assign({ infill: 0.25, topLayers: 6, flow: 11, plates: 0 }, print || {}));
       g += e.grams; h += e.hours;

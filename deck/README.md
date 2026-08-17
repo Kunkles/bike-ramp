@@ -101,6 +101,19 @@ them in line, so there is nothing to fasten.
 there is no full-height face to mate with. Use up / flat / down for anything you
 intend to extend later.
 
+## Getting it onto the printer
+
+**Download plates .3mf** gives one 3MF per plate with the parts already arranged
+inside the bed, named, and in millimetres. Open each and slice it.
+
+Multi-plate projects are a Bambu extension with no published schema, so rather
+than guess at it each plate is a plain 3MF -- the part of the format that is
+actually specified. It carries geometry and placement, not print settings, so
+set walls / top layers / infill yourself the first time.
+
+**Download all tiles .zip** still gives the individual STLs if you would rather
+arrange them by hand.
+
 ## Known limits
 
 - **Untested in plastic.** Rib spacing comes from a beam calculation assuming
@@ -111,6 +124,10 @@ intend to extend later.
 - **No ground spikes.** On grass, stake the thresholds.
 - Generated from `webapp/deck.js`; the solid path has an OpenSCAD cross-check
   and this does not.
+- **The 3MF has not been opened in Bambu Studio.** It round-trips correctly --
+  every entry inflates, the XML re-parses, all triangles survive, everything
+  lands inside the bed -- but that is structural validity, not a slicer having
+  accepted it.
 - **The module joint is untested in plastic.** It resists the modules sliding
   apart and keeps them level, but nothing stops a determined lift. If it works
   loose in use, a strap or a stake through the end thresholds will hold it.
