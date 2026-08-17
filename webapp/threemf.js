@@ -94,8 +94,33 @@
   // ------------------------------------------------------------- packing ---
   // Shelf packing, tallest first, with a 90-degree turn allowed. Good enough
   // for parts that are mostly long thin bars, and it never overlaps.
-  function pack(parts, bedX, bedY, gap) {
-    var g = gap == null ? 6 : gap;
+  // `avoid` is a list of [x0,y0,x1,y1] keep-outs in bed coordinates: the X1C's
+  // 18 x 28 mm front-left exclusion, and the prime tower if one is reserved.
+  function pack(parts, bedX, bedY, gap, avoid) {
+    var g = gap == null ? 6 : gap, keep = avoid || [];
+    function clashes(x, y, w, h) {
+      for (var i = 0; i < keep.length; i++) {
+        var k = keep[i];
+        if (x < k[2] && k[0] < x + w && y < k[3] && k[1] < y + h) return k;
+      }
+      return null;
+    }
+    // Leftmost x at a given y that clears every keep-out, or null. Sliding
+    // right is not always possible -- a 242 mm part cannot get past an 18 mm
+    // corner on a 250 mm bed -- so callers step the row up instead.
+    function slotAt(y, w, h) {
+      var x = 0, k = clashes(x, y, w, h), guard = 0;
+      while (k && guard++ < 8) { x = k[2] + g; k = clashes(x, y, w, h); }
+      return (k || x + w > bedX + 1e-9) ? null : x;
+    }
+    // Row heights a keep-out pushes us above, lowest first.
+    function ledges(from) {
+      var ys = [from], i;
+      for (i = 0; i < keep.length; i++)
+        if (keep[i][3] + g > from) ys.push(keep[i][3] + g);
+      ys.sort(function (a, b) { return a - b; });
+      return ys;
+    }
     // bedX/bedY are the usable area already, so a part only has to fit the bed
     // itself -- the gap goes BETWEEN parts, not around the outside.
     var items = parts.map(function (p, i) {
@@ -124,8 +149,11 @@
         for (ri = 0; ri < plates[pi].rows.length && !placed; ri++)
           for (t = 0; t < tries.length && !placed; t++) {
             var row = plates[pi].rows[ri], w = tries[t][0], h = tries[t][1];
-            if (row.x + w > bedX + 1e-9) continue;
             if (h > row.h + 1e-9) continue;          // must fit the row as built
+            var x = row.x, k = clashes(x, row.y, w, h), guard = 0;
+            while (k && guard++ < 8) { x = k[2] + g; k = clashes(x, row.y, w, h); }
+            if (k || x + w > bedX + 1e-9) continue;
+            row.x = x;
             put(it, plates[pi], row, w, h, tries[t][2]);
             placed = true;
           }
@@ -133,22 +161,36 @@
       for (pi = 0; pi < plates.length && !placed; pi++)
         for (t = 0; t < tries.length && !placed; t++) {
           var pl = plates[pi], w2 = tries[t][0], h2 = tries[t][1];
-          if (w2 > bedX + 1e-9 || pl.y + h2 > bedY + 1e-9) continue;
-          var nr = { x: 0, y: pl.y, h: h2 };
+          if (w2 > bedX + 1e-9) continue;
+          var ys = ledges(pl.y), yi, y2 = null, x2 = null;
+          for (yi = 0; yi < ys.length && x2 === null; yi++) {
+            if (ys[yi] + h2 > bedY + 1e-9) continue;
+            x2 = slotAt(ys[yi], w2, h2);
+            if (x2 !== null) y2 = ys[yi];
+          }
+          if (x2 === null) continue;
+          var nr = { x: x2, y: y2, h: h2 };
           pl.rows.push(nr);
           put(it, pl, nr, w2, h2, tries[t][2]);
-          pl.y += h2 + g;
+          pl.y = y2 + h2 + g;
           placed = true;
         }
 
       for (t = 0; t < tries.length && !placed; t++) {
         var w3 = tries[t][0], h3 = tries[t][1];
         if (w3 > bedX + 1e-9 || h3 > bedY + 1e-9) continue;
+        var ys3 = ledges(0), yj, y3 = null, x3 = null;
+        for (yj = 0; yj < ys3.length && x3 === null; yj++) {
+          if (ys3[yj] + h3 > bedY + 1e-9) continue;
+          x3 = slotAt(ys3[yj], w3, h3);
+          if (x3 !== null) y3 = ys3[yj];
+        }
+        if (x3 === null) continue;
         var np = { rows: [], y: 0, items: [] };
-        var r0 = { x: 0, y: 0, h: h3 };
+        var r0 = { x: x3, y: y3, h: h3 };
         np.rows.push(r0); plates.push(np);
         put(it, np, r0, w3, h3, tries[t][2]);
-        np.y = h3 + g;
+        np.y = y3 + h3 + g;
         placed = true;
       }
 

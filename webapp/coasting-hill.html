@@ -376,6 +376,7 @@ input[type=range]::-moz-range-thumb {
         <button class="chip" type="button" data-mode="exploded" aria-pressed="false">Exploded</button>
         <button class="chip" type="button" data-mode="underside" aria-pressed="false">Underside</button>
         <button class="chip" type="button" id="bike-toggle" aria-pressed="true">Bike</button>
+        <button class="chip" type="button" id="tower-toggle" aria-pressed="true" title="Keep the purge / flow-calibration square clear on every plate">Purge area</button>
       </div>
       <div class="vp-br">drag to orbit &middot; scroll to zoom<br>floor grid 100 mm</div>
     </div>
@@ -2293,8 +2294,33 @@ input[type=range]::-moz-range-thumb {
   // ------------------------------------------------------------- packing ---
   // Shelf packing, tallest first, with a 90-degree turn allowed. Good enough
   // for parts that are mostly long thin bars, and it never overlaps.
-  function pack(parts, bedX, bedY, gap) {
-    var g = gap == null ? 6 : gap;
+  // `avoid` is a list of [x0,y0,x1,y1] keep-outs in bed coordinates: the X1C's
+  // 18 x 28 mm front-left exclusion, and the prime tower if one is reserved.
+  function pack(parts, bedX, bedY, gap, avoid) {
+    var g = gap == null ? 6 : gap, keep = avoid || [];
+    function clashes(x, y, w, h) {
+      for (var i = 0; i < keep.length; i++) {
+        var k = keep[i];
+        if (x < k[2] && k[0] < x + w && y < k[3] && k[1] < y + h) return k;
+      }
+      return null;
+    }
+    // Leftmost x at a given y that clears every keep-out, or null. Sliding
+    // right is not always possible -- a 242 mm part cannot get past an 18 mm
+    // corner on a 250 mm bed -- so callers step the row up instead.
+    function slotAt(y, w, h) {
+      var x = 0, k = clashes(x, y, w, h), guard = 0;
+      while (k && guard++ < 8) { x = k[2] + g; k = clashes(x, y, w, h); }
+      return (k || x + w > bedX + 1e-9) ? null : x;
+    }
+    // Row heights a keep-out pushes us above, lowest first.
+    function ledges(from) {
+      var ys = [from], i;
+      for (i = 0; i < keep.length; i++)
+        if (keep[i][3] + g > from) ys.push(keep[i][3] + g);
+      ys.sort(function (a, b) { return a - b; });
+      return ys;
+    }
     // bedX/bedY are the usable area already, so a part only has to fit the bed
     // itself -- the gap goes BETWEEN parts, not around the outside.
     var items = parts.map(function (p, i) {
@@ -2323,8 +2349,11 @@ input[type=range]::-moz-range-thumb {
         for (ri = 0; ri < plates[pi].rows.length && !placed; ri++)
           for (t = 0; t < tries.length && !placed; t++) {
             var row = plates[pi].rows[ri], w = tries[t][0], h = tries[t][1];
-            if (row.x + w > bedX + 1e-9) continue;
             if (h > row.h + 1e-9) continue;          // must fit the row as built
+            var x = row.x, k = clashes(x, row.y, w, h), guard = 0;
+            while (k && guard++ < 8) { x = k[2] + g; k = clashes(x, row.y, w, h); }
+            if (k || x + w > bedX + 1e-9) continue;
+            row.x = x;
             put(it, plates[pi], row, w, h, tries[t][2]);
             placed = true;
           }
@@ -2332,22 +2361,36 @@ input[type=range]::-moz-range-thumb {
       for (pi = 0; pi < plates.length && !placed; pi++)
         for (t = 0; t < tries.length && !placed; t++) {
           var pl = plates[pi], w2 = tries[t][0], h2 = tries[t][1];
-          if (w2 > bedX + 1e-9 || pl.y + h2 > bedY + 1e-9) continue;
-          var nr = { x: 0, y: pl.y, h: h2 };
+          if (w2 > bedX + 1e-9) continue;
+          var ys = ledges(pl.y), yi, y2 = null, x2 = null;
+          for (yi = 0; yi < ys.length && x2 === null; yi++) {
+            if (ys[yi] + h2 > bedY + 1e-9) continue;
+            x2 = slotAt(ys[yi], w2, h2);
+            if (x2 !== null) y2 = ys[yi];
+          }
+          if (x2 === null) continue;
+          var nr = { x: x2, y: y2, h: h2 };
           pl.rows.push(nr);
           put(it, pl, nr, w2, h2, tries[t][2]);
-          pl.y += h2 + g;
+          pl.y = y2 + h2 + g;
           placed = true;
         }
 
       for (t = 0; t < tries.length && !placed; t++) {
         var w3 = tries[t][0], h3 = tries[t][1];
         if (w3 > bedX + 1e-9 || h3 > bedY + 1e-9) continue;
+        var ys3 = ledges(0), yj, y3 = null, x3 = null;
+        for (yj = 0; yj < ys3.length && x3 === null; yj++) {
+          if (ys3[yj] + h3 > bedY + 1e-9) continue;
+          x3 = slotAt(ys3[yj], w3, h3);
+          if (x3 !== null) y3 = ys3[yj];
+        }
+        if (x3 === null) continue;
         var np = { rows: [], y: 0, items: [] };
-        var r0 = { x: 0, y: 0, h: h3 };
+        var r0 = { x: x3, y: y3, h: h3 };
         np.rows.push(r0); plates.push(np);
         put(it, np, r0, w3, h3, tries[t][2]);
-        np.y = h3 + g;
+        np.y = y3 + h3 + g;
         placed = true;
       }
 
@@ -2574,11 +2617,16 @@ input[type=range]::-moz-range-thumb {
   // estimate differ between machines, and it is meant to be corrected from a
   // real slice.
   var BED_MARGIN = 6;
+  // Bambu machines keep an 18 x 28 mm patch at the front-left corner for the
+  // nozzle wipe, and reserve a square for the purge / calibration tower. Both
+  // read from a project Bambu Studio saved, not estimated.
+  var BAMBU_EXCLUDE = [[0, 0, 18, 28]];
+  var TOWER = [165, 211.6, 200, 246.6];
   var PRINTERS = [
-    { name:'Bambu Lab X1C / X1E / P1S / P1P', x:256, y:256, flow:11 },
-    { name:'Bambu Lab A1',                    x:256, y:256, flow:9 },
-    { name:'Bambu Lab A1 mini',               x:180, y:180, flow:9 },
-    { name:'Bambu Lab H2S',                   x:340, y:320, flow:12 },
+    { name:'Bambu Lab X1C / X1E / P1S / P1P', exclude:BAMBU_EXCLUDE, x:256, y:256, flow:11 },
+    { name:'Bambu Lab A1', exclude:BAMBU_EXCLUDE,                    x:256, y:256, flow:9 },
+    { name:'Bambu Lab A1 mini', exclude:BAMBU_EXCLUDE,               x:180, y:180, flow:9 },
+    { name:'Bambu Lab H2S', exclude:BAMBU_EXCLUDE,                   x:340, y:320, flow:12 },
     { name:'Bambu Lab H2D / H2D Pro',         x:325, y:320, flow:12,
       note:'H2D figures are the single-nozzle printable area. The headline ' +
            '350 mm width only applies with both nozzles loaded with the same ' +
@@ -2601,6 +2649,7 @@ input[type=range]::-moz-range-thumb {
     spikeLen: 6, infill: 0.25, ams: false, mode: 'assembled', isolate: null,
     build: 'solid',                 // 'solid' | 'deck'
     bike: true,                     // scale reference in the viewport
+    reserveTower: true,             // leave the purge/calibration square free
     colours: ['#FF2E88', '#25E3D8', '#FFE14D', '#1A1728'],
     paint: 0
   });
@@ -3866,9 +3915,23 @@ input[type=range]::-moz-range-thumb {
   // One plain 3MF per plate, parts already arranged inside the bed. Multi-plate
   // projects are a Bambu extension with no published schema, so this stays
   // inside the part of the format that is actually specified.
+  // The printer is identified by its bed size, the same way syncPrinter does it,
+  // so a custom bed simply gets no keep-outs.
+  function keepOuts() {
+    var hit = null;
+    PRINTERS.forEach(function (pr) {
+      if (!hit && pr.x - BED_MARGIN === state.bedX && pr.y - BED_MARGIN === state.bedY)
+        hit = pr;
+    });
+    if (!hit || !hit.exclude) return [];
+    var out = hit.exclude.slice();
+    if (state.reserveTower) out.push(TOWER);
+    return out;
+  }
+
   function packedPlates() {
     var parts = printableParts();
-    return TMF.pack(parts, state.bedX, state.bedY, 6).map(function (pl) {
+    return TMF.pack(parts, state.bedX, state.bedY, 6, keepOuts()).map(function (pl) {
       return pl.items.map(function (it) {
         return { name: it.part.name, tris: it.part.tris, rot: it.rot,
                  at: [it.at[0] + (it.rot ? it.part.size[1] : 0), it.at[1]] };
@@ -3979,6 +4042,11 @@ input[type=range]::-moz-range-thumb {
         'The controls and downloads still work.</p>';
       return;
     }
+    var tt = $('#tower-toggle');
+    if (tt) tt.addEventListener('click', function () {
+      state.reserveTower = !state.reserveTower;
+      tt.setAttribute('aria-pressed', String(state.reserveTower));
+    });
     var bt = $('#bike-toggle');
     if (bt) bt.addEventListener('click', function () {
       state.bike = !state.bike;

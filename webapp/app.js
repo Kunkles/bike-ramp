@@ -55,11 +55,16 @@
   // estimate differ between machines, and it is meant to be corrected from a
   // real slice.
   var BED_MARGIN = 6;
+  // Bambu machines keep an 18 x 28 mm patch at the front-left corner for the
+  // nozzle wipe, and reserve a square for the purge / calibration tower. Both
+  // read from a project Bambu Studio saved, not estimated.
+  var BAMBU_EXCLUDE = [[0, 0, 18, 28]];
+  var TOWER = [165, 211.6, 200, 246.6];
   var PRINTERS = [
-    { name:'Bambu Lab X1C / X1E / P1S / P1P', x:256, y:256, flow:11 },
-    { name:'Bambu Lab A1',                    x:256, y:256, flow:9 },
-    { name:'Bambu Lab A1 mini',               x:180, y:180, flow:9 },
-    { name:'Bambu Lab H2S',                   x:340, y:320, flow:12 },
+    { name:'Bambu Lab X1C / X1E / P1S / P1P', exclude:BAMBU_EXCLUDE, x:256, y:256, flow:11 },
+    { name:'Bambu Lab A1', exclude:BAMBU_EXCLUDE,                    x:256, y:256, flow:9 },
+    { name:'Bambu Lab A1 mini', exclude:BAMBU_EXCLUDE,               x:180, y:180, flow:9 },
+    { name:'Bambu Lab H2S', exclude:BAMBU_EXCLUDE,                   x:340, y:320, flow:12 },
     { name:'Bambu Lab H2D / H2D Pro',         x:325, y:320, flow:12,
       note:'H2D figures are the single-nozzle printable area. The headline ' +
            '350 mm width only applies with both nozzles loaded with the same ' +
@@ -82,6 +87,7 @@
     spikeLen: 6, infill: 0.25, ams: false, mode: 'assembled', isolate: null,
     build: 'solid',                 // 'solid' | 'deck'
     bike: true,                     // scale reference in the viewport
+    reserveTower: true,             // leave the purge/calibration square free
     colours: ['#FF2E88', '#25E3D8', '#FFE14D', '#1A1728'],
     paint: 0
   });
@@ -1347,9 +1353,23 @@
   // One plain 3MF per plate, parts already arranged inside the bed. Multi-plate
   // projects are a Bambu extension with no published schema, so this stays
   // inside the part of the format that is actually specified.
+  // The printer is identified by its bed size, the same way syncPrinter does it,
+  // so a custom bed simply gets no keep-outs.
+  function keepOuts() {
+    var hit = null;
+    PRINTERS.forEach(function (pr) {
+      if (!hit && pr.x - BED_MARGIN === state.bedX && pr.y - BED_MARGIN === state.bedY)
+        hit = pr;
+    });
+    if (!hit || !hit.exclude) return [];
+    var out = hit.exclude.slice();
+    if (state.reserveTower) out.push(TOWER);
+    return out;
+  }
+
   function packedPlates() {
     var parts = printableParts();
-    return TMF.pack(parts, state.bedX, state.bedY, 6).map(function (pl) {
+    return TMF.pack(parts, state.bedX, state.bedY, 6, keepOuts()).map(function (pl) {
       return pl.items.map(function (it) {
         return { name: it.part.name, tris: it.part.tris, rot: it.rot,
                  at: [it.at[0] + (it.rot ? it.part.size[1] : 0), it.at[1]] };
@@ -1460,6 +1480,11 @@
         'The controls and downloads still work.</p>';
       return;
     }
+    var tt = $('#tower-toggle');
+    if (tt) tt.addEventListener('click', function () {
+      state.reserveTower = !state.reserveTower;
+      tt.setAttribute('aria-pressed', String(state.reserveTower));
+    });
     var bt = $('#bike-toggle');
     if (bt) bt.addEventListener('click', function () {
       state.bike = !state.bike;

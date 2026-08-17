@@ -112,6 +112,11 @@ all the plates are there.
 
 **Download all tiles .zip** still gives individual STLs to arrange by hand.
 
+Plates leave the X1C's 18 x 28 mm front-left exclusion clear, and by default
+also reserve the 35 mm purge / flow-calibration square. Turn **Purge area** off
+in the viewport if you are printing one colour and skipping calibration -- it
+costs about one extra plate on a deck build.
+
 None of them carry print settings, so set walls / top layers / infill yourself
 the first time. For a deck build nothing you print is a riding surface, so a
 coarse layer height costs you nothing: 0.28 mm rather than 0.12 roughly halves
