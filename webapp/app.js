@@ -13,6 +13,8 @@
                      humps:1, bevelRun:100 },
     'Camel back':  { shape:'roller', hillLength:1000, hillWidth:300, hillHeight:50,
                      humps:2, bevelRun:90 },
+    'Medium':      { shape:'roller', hillLength:920, hillWidth:330, hillHeight:90,
+                     humps:1, crestFlat:30, bevelRun:80 },
     'Wide & low':  { shape:'roller', hillLength:700, hillWidth:480, hillHeight:35,
                      humps:1, bevelRun:130 },
     'Step drop':   { shape:'drop', hillLength:500, hillWidth:300, hillHeight:50,
@@ -125,10 +127,11 @@
              'top layers with it.' }
     ]},
     { group:'Printer', custom:'printer', items:[
-      { k:'fit', label:'Joint clearance', min:0.1, max:0.8, step:0.05, unit:'mm',
-        hint:'Cut into each socket, per side, so twice this is the play across ' +
-             'a dovetail. Assembly is straight down, so it is there for print ' +
-             'error rather than sliding \u2014 drop to 0.15 if it still rattles.' }
+      { k:'fit', label:'Joint clearance', min:0.05, max:0.8, step:0.01, unit:'mm',
+        hint:'Cut into each socket, per side, so twice this is the gap across a ' +
+             'dovetail. 0.12 leaves a 0.24 mm bond line \u2014 enough for glue ' +
+             'to wick in, tight enough that the seam mostly closes. Go below ' +
+             '0.10 only if your printer is well dialled in.' }
     ]},
     { group:'Estimate', items:[
       { k:'infill', label:'Infill', min:0.05, max:0.4, step:0.01, unit:'%', pct:true },

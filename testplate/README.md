@@ -3,7 +3,7 @@
 One plate, full-size joints. Print this before committing to the real hill.
 
 A 180 × 160 × 30 mm hill, deliberately small — but **nothing here is scaled**.
-Every fit is the production value: 0.20 mm dovetail clearance, 0.25 mm thread
+Every fit is the production value: 0.12 mm dovetail clearance, 0.25 mm thread
 clearance, 3 mm pitch. Scaling the model would shrink those into the width of a
 single extrusion and tell you nothing about whether the real parts fit.
 
@@ -37,11 +37,14 @@ Spikes the same but 4 walls and 40% infill, printed stud-down as oriented.
 6. Look along the low end of the ramp in raking light. This is where the last
    print pinholed; at 10 top layers the skin should be closed.
 
-The joint is tighter than the last test print: **0.20 mm** per side, down from
-0.35. That was the point of the change — but it is the thing most likely to
-have gone too far. If the dovetail needs a mallet, raise **Joint clearance**
-0.20 → 0.30 and reprint `tile_10` only. If a spike binds, work it in and out
-once to bed the thread; Joint clearance does not affect the threads.
+The joint is now **0.12 mm** per side — 0.24 mm across the dovetail. It went
+0.35 (loose) → 0.20 (still slightly loose) → 0.12, which should mostly close the
+seam once glued while leaving a bond line for the glue to wick into.
+
+This is the tightest it has been, so it is the thing most likely to have gone
+too far. If the dovetail needs a mallet, raise **Joint clearance** to 0.16 and
+reprint `tile_10` only. If a spike binds, work it in and out once to bed the
+thread; Joint clearance does not affect the threads.
 
 At 180 mm long and 30 mm tall the slope is 26.7°, twice the real hill's 12.9°.
 That is fine for checking fit, surface and warp — don't read anything into how

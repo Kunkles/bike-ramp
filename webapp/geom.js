@@ -22,7 +22,7 @@
     hillLength: 600, hillWidth: 300, hillHeight: 45, humps: 1,
     bevelRun: 90, edgeLip: 1.2,
     bedX: 250, bedY: 250,      // usable bed, after edge margin
-    tabDepth: 12, tabNeck: 18, tabTip: 26, fit: 0.20, minTabH: 10,
+    tabDepth: 12, tabNeck: 18, tabTip: 26, fit: 0.12, minTabH: 10,
     spikeLen: 0,       // ground spike protrusion, mm. 0 = no spike mounts
     flow: 8,           // average volumetric throughput, mm^3/s -- see estimate()
     decal: 'none',     // 'none' | 'text' | 'checker' | 'both'
