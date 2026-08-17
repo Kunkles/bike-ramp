@@ -81,6 +81,26 @@ each groove. The generator's cut list gives the exact number for your settings.
    climbs that over an 80 mm run. This is the one place a wheel can catch.
 4. **Sheet fully home at both ends**, not standing proud of a channel.
 
+## Joining modules
+
+Set the shape to **Module: up / flat / down** and the frame gains a joint at each
+end where the ramp is at full height.
+
+The base strips stop with a **half-mortise** at the module face. Butt two
+modules and the two halves make a whole mortise; one rib's feet drop into it and
+span the seam, tying the modules together. That same rib carries the end of both
+plywood sheets, so the riding surface stays flush across the joint.
+
+Both modules ship a rib for the shared station and they are identical, so **use
+either one and keep the spare** — you get one spare rib per joint.
+
+The channels butt end to end. They sit on the ground and the shared rib holds
+them in line, so there is nothing to fasten.
+
+**A roller will not join anything.** It returns to the ground at both ends, so
+there is no full-height face to mate with. Use up / flat / down for anything you
+intend to extend later.
+
 ## Known limits
 
 - **Untested in plastic.** Rib spacing comes from a beam calculation assuming
@@ -91,6 +111,9 @@ each groove. The generator's cut list gives the exact number for your settings.
 - **No ground spikes.** On grass, stake the thresholds.
 - Generated from `webapp/deck.js`; the solid path has an OpenSCAD cross-check
   and this does not.
+- **The module joint is untested in plastic.** It resists the modules sliding
+  apart and keeps them level, but nothing stops a determined lift. If it works
+  loose in use, a strap or a stake through the end thresholds will hold it.
 
 ## Wider than your bed
 

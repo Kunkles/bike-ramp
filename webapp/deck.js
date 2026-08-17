@@ -92,7 +92,10 @@
     if (Math.abs(d) < 1e-12) return false;
     var u = ((b[1]-c[1])*(px-c[0]) + (c[0]-b[0])*(py-c[1])) / d;
     var v = ((c[1]-a[1])*(px-c[0]) + (a[0]-c[0])*(py-c[1])) / d;
-    return u > 1e-9 && v > 1e-9 && u + v < 1 - 1e-9;
+    // Counts points ON an edge as inside. Collinear vertices -- three mortise
+    // floors at the same height, say -- otherwise let an ear span straight
+    // across them, leaving T-junctions that read as a non-manifold shell.
+    return u > -1e-9 && v > -1e-9 && u + v < 1 + 1e-9;
   }
   function earClip(poly) {
     var pts = poly.slice();
@@ -237,17 +240,31 @@
   // A base strip: a flat bar on the ground with a mortise under every rib it
   // passes. This is the bottom plane, and it is what makes the frame a frame.
   function stripSection(p, x0, x1, stations) {
-    var pts = [[x0, 0], [x1, 0], [x1, p.baseH]], i;
-    var half = p.ribThick / 2 + p.fit;
-    for (i = stations.length - 1; i >= 0; i--) {
-      var c = stations[i];
-      if (c - half <= x0 + 1 || c + half >= x1 - 1) continue;
-      pts.push([c + half, p.baseH], [c + half, p.baseH - p.tenon],
-               [c - half, p.baseH - p.tenon], [c - half, p.baseH]);
+    var half = p.ribThick / 2 + p.fit, H = p.baseH, T = p.tenon;
+    // Clip each mortise to this run rather than dropping it. A mortise that
+    // runs off the end becomes an open half -- and two modules butted together
+    // make a whole one, so a single rib's feet span the seam and tie them.
+    var ms = [], i;
+    for (i = 0; i < stations.length; i++) {
+      var a = Math.max(stations[i] - half, x0), b = Math.min(stations[i] + half, x1);
+      if (b - a > 0.5) ms.push([a, b]);
     }
-    pts.push([x0, p.baseH]);
+    ms.sort(function (u, v) { return u[0] - v[0]; });
+
+    // top edge, left to right, stepping down through each mortise
+    var top = [], cur = x0;
+    for (i = 0; i < ms.length; i++) {
+      if (ms[i][0] > cur + 1e-9) top.push([cur, H], [ms[i][0], H]);
+      top.push([ms[i][0], H - T], [ms[i][1], H - T]);
+      cur = ms[i][1];
+    }
+    if (cur < x1 - 1e-9) top.push([cur, H], [x1, H]);
+
+    var pts = [[x0, 0], [x1, 0]];
+    for (i = top.length - 1; i >= 0; i--) pts.push(top[i]);
     return pts;
   }
+
   function stripAt(p, x0, x1, stations, y0, y1) {
     return extrude(stripSection(p, x0, x1, stations), y0, y1,
       function (x, z, yy) { return [x, yy, z]; });
