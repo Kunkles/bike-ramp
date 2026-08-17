@@ -29,7 +29,15 @@
     { v:'drop',   label:'Step drop',
       hint:'Rises, runs flat, then stops at a vertical edge. Height is the drop.' },
     { v:'kicker', label:'Curved jump',
-      hint:'Curved launch, steepest at the lip, vertical behind it.' }
+      hint:'Curved launch, steepest at the lip, vertical behind it.' },
+    { v:'rise',   label:'Module: up',
+      hint:'Ground to full height, dovetailed at the top so a flat or a down ' +
+           'ramp bolts straight on. Both ends leave at zero slope.' },
+    { v:'flat',   label:'Module: flat',
+      hint:'A level table at full height, dovetailed both ends. Add one between ' +
+           'an up and a down to make a longer table top.' },
+    { v:'fall',   label:'Module: down',
+      hint:'Full height back to the ground, dovetailed at the top end.' }
   ];
 
   // Nominal bed sizes; BED_MARGIN comes off each axis for clearance at the edge.
@@ -291,7 +299,7 @@
   function rebuildDeck() {
     var d = DK.build({ hillLength: state.hillLength, hillWidth: state.hillWidth,
                        hillHeight: state.hillHeight, humps: state.humps,
-                       crestFlat: state.crestFlat,
+                       crestFlat: state.crestFlat, shape: state.shape,
                        bedX: state.bedX, bedY: state.bedY });
     var ps = DK.parts(d);
     var tiles = ps.map(function (q, i) {

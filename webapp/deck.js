@@ -27,6 +27,7 @@
     hillWidth: 250,       // mm, across -- also the sheet width
     hillHeight: 35,       // mm, at the crest, to the top of the SHEET
     humps: 2,
+    shape: 'roller',      // 'roller' | 'rise' | 'flat' | 'fall'
     crestFlat: 0,         // mm of flat held at each crest
     sheet: 3.175,         // mm, 1/8 inch plywood
     maxSpan: 108,         // mm, the sag limit for that sheet under a wheel
@@ -49,9 +50,10 @@
   };
 
   function prof(p, x) {
-    return BR.profX({ shape: 'roller', humps: p.humps, hillLength: p.hillLength,
-                      hillHeight: p.hillHeight, edgeLip: 1.2, bevelRun: 0,
-                      deck: 0, crestFlat: p.crestFlat || 0 }, x);
+    return BR.profX({ shape: p.shape || 'roller', humps: p.humps,
+                      hillLength: p.hillLength, hillHeight: p.hillHeight,
+                      edgeLip: 1.2, bevelRun: 0, deck: p.deck || 0,
+                      crestFlat: p.crestFlat || 0 }, x);
   }
   // The ramp surface is the top of the SHEET, so a rib stops short of it by one
   // sheet thickness measured perpendicular -- a slightly larger drop vertically.
@@ -347,7 +349,10 @@
     var p = Object.assign({}, DEFAULTS, opts || {});
     // Land ribs exactly on crests and troughs: divide the half-hump, which puts
     // a rib at every peak -- most load, tightest bend -- and every low point.
-    var half = p.hillLength / p.humps / 2;
+    // A roller's ribs divide the half-hump so one lands on every crest. A
+    // module has no crest, so just space them evenly inside the sag limit.
+    var oneWay = p.shape === 'rise' || p.shape === 'fall' || p.shape === 'flat';
+    var half = oneWay ? p.hillLength : p.hillLength / p.humps / 2;
     var perHalf = Math.max(1, Math.ceil(half / p.maxSpan));
     var step = half / perHalf;
     var n = Math.round(p.hillLength / step) + 1;

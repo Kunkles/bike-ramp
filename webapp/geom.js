@@ -337,6 +337,16 @@
       return lip + R - Math.sqrt(Math.max(0, R * R - xx * xx));
     }
 
+    // Module profiles: half a raised cosine, so they leave the ground and arrive
+    // at full height with ZERO slope at both ends. That is what lets any two
+    // modules butt together without a kink in the riding surface.
+    if (p.shape === 'rise' || p.shape === 'fall') {
+      var tm = Math.min(1, Math.max(0, x / L));
+      var c2 = Math.cos(Math.PI * tm);
+      return lip + h * 0.5 * (p.shape === 'rise' ? 1 - c2 : 1 + c2);
+    }
+    if (p.shape === 'flat') return H;
+
     // Roller: a raised cosine, optionally held at its peak to give a flat top.
     // Holding rather than stretching keeps the toe shape and the approach curve
     // intact -- the cosine is simply compressed into what length is left, so a
@@ -367,6 +377,10 @@
       if (h < 0.01) return 0;
       var R = (L * L + h * h) / (2 * h);
       t = L / Math.max(1e-9, R - h);
+    } else if (p.shape === 'flat') {
+      return 0;
+    } else if (p.shape === 'rise' || p.shape === 'fall') {
+      t = Math.PI * h / (2 * Math.max(1, L));
     } else {
       // the cosine is squeezed into (wavelength - flat), so it steepens
       var lam2 = L / Math.max(1, p.humps);
@@ -477,11 +491,16 @@
   // ------------------------------------------------------ tile footprint ----
   function tileFeatures(p, t, i, j) {
     var f = [], x0 = i * t.px, x1 = (i + 1) * t.px, y0 = j * t.py, y1 = (j + 1) * t.py;
-    if (i < t.nx - 1) xseamTabs(p, x1, y0, t.py).forEach(function (c) {
+    // A module joins the next one exactly the way two tiles join: tabs on the
+    // far face, sockets on the near one. xseamTabs already drops any tab where
+    // the ramp is too thin to carry it, so a module that ends on the ground
+    // simply gets none.
+    var mod = p.shape === 'rise' || p.shape === 'flat' || p.shape === 'fall';
+    if (i < t.nx - 1 || p.joinEnd || mod) xseamTabs(p, x1, y0, t.py).forEach(function (c) {
       f.push(feature(p, 'tab', 'x', x1, c, 0)); });
     if (j < t.ny - 1) yseamTabs(p, y1, x0, t.px).forEach(function (c) {
       f.push(feature(p, 'tab', 'y', y1, c, 0)); });
-    if (i > 0) xseamTabs(p, x0, y0, t.py).forEach(function (c) {
+    if (i > 0 || p.joinStart || mod) xseamTabs(p, x0, y0, t.py).forEach(function (c) {
       f.push(feature(p, 'socket', 'x', x0, c, p.fit)); });
     if (j > 0) yseamTabs(p, y0, x0, t.px).forEach(function (c) {
       f.push(feature(p, 'socket', 'y', y0, c, p.fit)); });

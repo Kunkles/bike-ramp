@@ -10,7 +10,7 @@
 // ============================================================================
 
 /* [Hill] */
-shape       = "roller";  // "roller" = up and back down
+shape       = "roller";  // "roller" = up and back down; "rise"/"flat"/"fall" are joinable modules
                          // "drop"   = rise, flat deck, then a vertical step off
                          // "kicker" = curved launch, steepest at the lip
 deck        = 150;   // drop only: flat run before the edge (mm)
@@ -105,6 +105,13 @@ function prof_x(x) =
       ? (h < 0.01 ? edge_lip
          : let (R = (L * L + h * h) / (2 * h), xx = min(max(x, 0), L))
            edge_lip + R - sqrt(max(0, R * R - xx * xx)))
+  : shape == "flat" ? hill_height
+  : (shape == "rise" || shape == "fall")
+      ? // Half a raised cosine: leaves the ground and arrives at full height
+        // with zero slope at both ends, so any two modules butt together
+        // without a kink in the riding surface.
+        let (tm = min(1, max(0, x / L)), c2 = cos(180 * tm))
+        edge_lip + h * 0.5 * (shape == "rise" ? 1 - c2 : 1 + c2)
   : // Roller: a raised cosine, optionally held at its peak for a flat top.
     let (lam = L / max(1, humps),
          c = min(max(0, crest_flat), lam * 0.8),
@@ -120,6 +127,8 @@ function max_slope() =
   : shape == "kicker" ? (h < 0.01 ? 0
                          : let (R = (L * L + h * h) / (2 * h))
                            atan(L / max(1e-9, R - h)))
+  : shape == "flat" ? 0
+  : (shape == "rise" || shape == "fall") ? atan(PI * h / (2 * max(1, L)))
   : // the cosine is squeezed into (wavelength - flat), so it steepens
     let (lam = L / max(1, humps), c = min(max(0, crest_flat), lam * 0.8))
     atan(PI * h / max(1e-9, lam - c));
@@ -424,11 +433,15 @@ module tile_footprint(i, j) {
     x0 = i * px;  x1 = (i + 1) * px;
     y0 = j * py;  y1 = (j + 1) * py;
 
+    // A module joins the next one exactly the way two tiles join. xseam_tabs
+    // already drops any tab where the ramp is too thin to carry one, so a
+    // module ending on the ground simply gets none.
+    let (mod = shape == "rise" || shape == "flat" || shape == "fall")
     difference() {
         union() {
             square([px, py]);
 
-            if (i < nx - 1)
+            if (i < nx - 1 || mod)
                 for (p = xseam_tabs(x1, y0, py))
                     translate([px, p - y0]) dovetail_2d();
 
@@ -437,7 +450,7 @@ module tile_footprint(i, j) {
                     translate([p - x0, py]) rotate(90) dovetail_2d();
         }
 
-        if (i > 0)
+        if (i > 0 || mod)
             for (p = xseam_tabs(x0, y0, py))
                 translate([0, p - y0]) dovetail_2d(fit);
 
