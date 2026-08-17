@@ -427,14 +427,47 @@
     return out;
   }
   // Dovetails on a seam at constant x, positioned along y (and vice versa).
-  // Skipped where the hill is too thin to make a useful tab.
+  //
+  // Spacing them across the whole seam and then discarding the thin ones wastes
+  // the space too: on a 920 mm hill the end tabs land where the ramp is 4 mm
+  // thick, get dropped, and leave 173 mm at each end with nothing holding the
+  // halves together. Find the stretches that are thick enough first, then space
+  // tabs inside those, so they run right up to where the material gives out.
+  function runsOver(hgt, a, b, minH) {
+    // A run ends at the last sample that qualifies, not the first that does
+    // not -- otherwise it is a sample step longer here than in the OpenSCAD
+    // model, and the tabs and sockets land in different places.
+    var N = 240, runs = [], inRun = false, start = a, lastOk = a, i;
+    for (i = 0; i <= N; i++) {
+      var q = a + (b - a) * i / N;
+      if (hgt(q) >= minH) {
+        if (!inRun) { start = q; inRun = true; }
+        lastOk = q;
+      } else if (inRun) { runs.push([start, lastOk]); inRun = false; }
+    }
+    if (inRun) runs.push([start, lastOk]);
+    return runs;
+  }
+  function spaceTabs(hgt, a, b, minH, tip) {
+    var out = [], edge = (tip || 26) / 2 + 2;   // keep the tab inside the run
+    runsOver(hgt, a, b, minH).forEach(function (r) {
+      var lo = r[0] + edge, hi = r[1] - edge;
+      if (hi - lo < 1) return;                  // no room for a useful tab
+      var n = Math.max(1, Math.round((r[1] - r[0]) / 120)), k;
+      if (n === 1) { out.push((lo + hi) / 2); return; }
+      // spread to the ends of the run, not inset from them -- the point is to
+      // reach as far towards the thin toe as the material allows
+      for (k = 0; k < n; k++) out.push(lo + (hi - lo) * k / (n - 1));
+    });
+    return out;
+  }
   function xseamTabs(p, xs, y0, span) {
-    return tabOffsets(span).map(function (t) { return y0 + t; })
-      .filter(function (q) { return hAt(p, xs, q) >= p.minTabH; });
+    return spaceTabs(function (q) { return hAt(p, xs, q); },
+                     y0, y0 + span, p.minTabH, p.tabTip);
   }
   function yseamTabs(p, ys, x0, span) {
-    return tabOffsets(span).map(function (t) { return x0 + t; })
-      .filter(function (q) { return hAt(p, q, ys) >= p.minTabH; });
+    return spaceTabs(function (q) { return hAt(p, q, ys); },
+                     x0, x0 + span, p.minTabH, p.tabTip);
   }
 
   // ------------------------------------------------------------- dovetail ---

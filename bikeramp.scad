@@ -408,22 +408,45 @@ module dovetail_2d(grow = 0) {
                  [0,  tab_neck / 2]]);
 }
 
-// How many dovetails fit on a seam of the given span, and where.
+// Dovetail placement.
+//
+// Spacing tabs across the whole seam and then discarding the thin ones wastes
+// the space as well: on a 920 mm hill the end tabs land where the ramp is 4 mm
+// thick, get dropped, and leave 173 mm at each end with nothing holding the
+// halves together. So find the stretches that carry a tab first, then space
+// tabs to the ends of those.
 function n_tabs(span) = max(1, round(span / 120));
-function tab_pos(span, k) = (k + 0.5) * span / n_tabs(span);
+
+// Sample the seam and return the run boundaries where height >= min_tab_h.
+// `hgt` is 0 for an x-seam (height varies along y) and 1 for a y-seam.
+function seam_h(kind, fixed, q) = kind == 0 ? h_at(fixed, q) : h_at(q, fixed);
+
+function seam_runs(kind, fixed, a, b) =
+    let (N = 240,
+         ok = [for (i = [0 : N]) seam_h(kind, fixed, a + (b - a) * i / N) >= min_tab_h],
+         // start of each run, then its end
+         starts = [for (i = [0 : N]) if (ok[i] && (i == 0 || !ok[i - 1]))
+                     a + (b - a) * i / N],
+         ends   = [for (i = [0 : N]) if (ok[i] && (i == N || !ok[i + 1]))
+                     a + (b - a) * i / N])
+    len(starts) == 0 ? []
+    : [for (i = [0 : len(starts) - 1]) [starts[i], ends[i]]];
+
+function run_tabs(r) =
+    let (edge = tab_tip / 2 + 2, lo = r[0] + edge, hi = r[1] - edge,
+         n = n_tabs(r[1] - r[0]))
+    (hi - lo < 1) ? []
+    : n == 1 ? [(lo + hi) / 2]
+    : [for (k = [0 : n - 1]) lo + (hi - lo) * k / (n - 1)];
+
+function seam_tabs(kind, fixed, a, b) =
+    [for (r = seam_runs(kind, fixed, a, b), p = run_tabs(r)) p];
 
 // Seam at constant x = xs, running in y from y0 to y0+span.
-// Only keep tabs where there is enough material to make them worthwhile.
-function xseam_tabs(xs, y0, span) =
-    [for (k = [0 : n_tabs(span) - 1])
-        let (p = y0 + tab_pos(span, k))
-        if (h_at(xs, p) >= min_tab_h) p];
+function xseam_tabs(xs, y0, span) = seam_tabs(0, xs, y0, y0 + span);
 
 // Seam at constant y = ys, running in x from x0 to x0+span.
-function yseam_tabs(ys, x0, span) =
-    [for (k = [0 : n_tabs(span) - 1])
-        let (p = x0 + tab_pos(span, k))
-        if (h_at(p, ys) >= min_tab_h) p];
+function yseam_tabs(ys, x0, span) = seam_tabs(1, ys, x0, x0 + span);
 
 // ------------------------------------------------------- tile footprint -----
 // Plan-view outline of tile (i,j): the rectangle, plus dovetails on its +X and
